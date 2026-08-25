@@ -422,6 +422,9 @@ app.post('/api/reveal-password', authenticateToken, requireRole(['ADMIN', 'SUPER
 
 // --- Generic Fetch Route (To get all state at once - Securely filtered) ---
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   try {
     const role = req.user.role;
     

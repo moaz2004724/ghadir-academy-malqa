@@ -1824,11 +1824,17 @@ export default function App() {
       const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
       let res = null;
       
-      const fetchUrls = ['/api/initial-data', `${targetUrl}/api/initial-data`];
+      const timestamp = Date.now();
+      const fetchUrls = [`/api/initial-data?_t=${timestamp}`, `${targetUrl}/api/initial-data?_t=${timestamp}`];
       for (const u of fetchUrls) {
         try {
           res = await fetch(u, {
-            headers: { 'Authorization': `Bearer ${savedToken}` }
+            cache: 'no-store',
+            headers: { 
+              'Authorization': `Bearer ${savedToken}`,
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
           });
           if (res && res.ok) break;
         } catch (err) {}
@@ -1838,20 +1844,36 @@ export default function App() {
         const data = await res.json();
 
         if (data.players && Array.isArray(data.players)) {
-          setPlayers(data.players);
+          setPlayers([...data.players]);
         }
-        if (data.coaches) setCoaches(data.coaches);
-        if (data.groups) {
+        if (data.coaches && Array.isArray(data.coaches)) {
+          setCoaches([...data.coaches]);
+        }
+        if (data.groups && Array.isArray(data.groups)) {
           const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-          setGroups(cleanGroups);
+          setGroups([...cleanGroups]);
         }
-        if (data.payments) setPayments(data.payments);
-        if (data.attendance) setAttendance(data.attendance);
-        if (data.coachesAttendance) setCoachesAttendance(data.coachesAttendance);
-        if (data.evals) setEvals(data.evals);
-        if (data.messages) setMessages(data.messages);
-        if (data.trainings) setTrainings(data.trainings);
-        if (data.parents) setParents(data.parents);
+        if (data.payments && Array.isArray(data.payments)) {
+          setPayments([...data.payments]);
+        }
+        if (data.attendance && Array.isArray(data.attendance)) {
+          setAttendance([...data.attendance]);
+        }
+        if (data.coachesAttendance && Array.isArray(data.coachesAttendance)) {
+          setCoachesAttendance([...data.coachesAttendance]);
+        }
+        if (data.evals && Array.isArray(data.evals)) {
+          setEvals([...data.evals]);
+        }
+        if (data.messages && Array.isArray(data.messages)) {
+          setMessages([...data.messages]);
+        }
+        if (data.trainings && Array.isArray(data.trainings)) {
+          setTrainings([...data.trainings]);
+        }
+        if (data.parents && Array.isArray(data.parents)) {
+          setParents([...data.parents]);
+        }
         
         setSyncStatus("synced");
         return data;

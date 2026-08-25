@@ -1230,6 +1230,38 @@ app.post('/api/trainings', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN
   }
 });
 
+// DELETE /api/trainings/:id — DELETE ONLY
+app.delete('/api/trainings/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await prisma.training.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'التمرين غير موجود' });
+    }
+    await prisma.training.delete({ where: { id } });
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error("Training delete error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/attendance/:id — DELETE ONLY
+app.delete('/api/attendance/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await prisma.attendance.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'سجل الحضور غير موجود' });
+    }
+    await prisma.attendance.delete({ where: { id } });
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error("Attendance delete error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/messages', authenticateToken, async (req, res) => {
   try {
     const { id, from, to, fromName, toName, text, files, date, read } = req.body;

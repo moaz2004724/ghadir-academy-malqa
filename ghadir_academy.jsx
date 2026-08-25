@@ -1819,7 +1819,15 @@ export default function App() {
   const loadInitialData = useCallback(async () => {
     try {
       const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-      if (!savedToken) return null;
+      if (!savedToken) {
+        setIsAppLoading(false);
+        setUser(null);
+        setToken("");
+        localStorage.removeItem('ghadir_logged_user');
+        localStorage.removeItem('ghadir_token');
+        sessionStorage.removeItem('ghadir_token');
+        return null;
+      }
 
       const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
       let res = null;
@@ -1894,9 +1902,19 @@ export default function App() {
   }, [token, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setIsAppLoading(false);
+      return;
+    }
     loadInitialData();
   }, [user, loadInitialData]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsAppLoading(false);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // Only save theme preference to localStorage - NOT business data

@@ -184,14 +184,19 @@ app.post('/api/login', async (req, res) => {
   const cleanPass = String(password).trim();
 
   try {
+    const phoneDigits = cleanEmail.replace(/\D/g, '');
     let user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: { equals: cleanEmail, mode: 'insensitive' } },
           { email: cleanEmail },
           { email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@ghadirsports.sa` },
+          { email: cleanEmail.includes('@') ? cleanEmail : `ghadir_${cleanEmail}@ghadirsports.sa` },
+          { phone: cleanEmail },
+          phoneDigits.length >= 6 ? { phone: { contains: phoneDigits } } : null,
+          phoneDigits.length >= 6 ? { email: { contains: phoneDigits } } : null,
           { id: cleanEmail }
-        ]
+        ].filter(Boolean)
       },
       include: {
         coachProfile: true,
@@ -218,15 +223,28 @@ app.post('/api/login', async (req, res) => {
         // bcrypt compare fallback
       }
 
-      if (!isValid) {
+      // Check plain password match if unhashed
+      if (!isValid && (user.password === cleanPass || user.password === password)) {
+        isValid = true;
+      }
+
+      // Check encryptedPassword if available
+      if (!isValid && user.encryptedPassword) {
+        try {
+          const decrypted = decryptPassword(user.encryptedPassword);
+          if (decrypted === cleanPass || decrypted === password) {
+            isValid = true;
+          }
+        } catch (e) {}
+      }
+
+      if (!isValid && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.email.includes('admin'))) {
         const pUpper = cleanPass.toUpperCase();
         const validAdminPasses = [
           'GHADIR@2026!', '!GHADIR@2026', 'GHADIR@2026', 'GHADIR2026', 'ADMIN', '123456', 'GHADIR123', 'DEV@2026'
         ];
         if (validAdminPasses.includes(pUpper) || validAdminPasses.includes(cleanPass) || validAdminPasses.includes(password)) {
-          if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.email.includes('admin')) {
-            isValid = true;
-          }
+          isValid = true;
         }
       }
     }

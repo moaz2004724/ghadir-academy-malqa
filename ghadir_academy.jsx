@@ -3303,7 +3303,7 @@ function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t, loadIn
 }
 
 /* ── Admin Coaches with Permissions ─────────────────── */
-function AdminCoaches({ coaches, setCoaches, groups, players, payments, t }) {
+function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadInitialData }) {
   const [sel, setSel] = useState(null);
   const [modal, setModal] = useState(null);
   const empty = { name: "", phone: "", email: "", password: "", specialty: "", exp: 0, cert: "", groupId: "", salary: 0, perms: { ...DEFAULT_PERMS } };
@@ -4755,7 +4755,7 @@ function InvoiceModal({ payment, allPayments, players, parents, onClose, groups 
   );
 }
 
-function AdminPayments({ payments, setPayments, players, coaches, parents, prices, t, attendance, setAttendance, trainings, groups }) {
+function AdminPayments({ payments, setPayments, players, coaches, parents, prices, t, attendance, setAttendance, trainings, groups, loadInitialData }) {
   const [modal, setModal] = useState(false);
   const [modalFg, setModalFg] = useState("الكل");
   const [invoicePay, setInvoicePay] = useState(null);
@@ -5486,7 +5486,7 @@ function AdminPrices({ prices, setPrices, t, groups, setGroups, loadInitialData 
   );
 }
 
-function AdminTrainings({ trainings, setTrainings, groups, coaches, t }) {
+function AdminTrainings({ trainings, setTrainings, groups, coaches, t, loadInitialData }) {
   const [modal, setModal] = useState(false);
   const empty = { 
     groupId: groups[0]?.id || "", 

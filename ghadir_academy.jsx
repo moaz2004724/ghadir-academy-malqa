@@ -3584,6 +3584,59 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     }
   }, [sel, players, setSelectedPlayerId]);
 
+  const handleDeletePlayer = async (playerId, playerName) => {
+    if (!playerId) {
+      console.error('[DELETE PLAYER] Missing playerId');
+      return;
+    }
+
+    const confirmed = window.confirm(`هل أنت متأكد من رغبتك في حذف اللاعب (${playerName || 'المحدد'})؟\n\nسيتم حذف سجل اللاعب وكافة المدفوعات والتقييمات التابعة له نهائياً.`);
+    if (!confirmed) return;
+
+    try {
+      console.log('[DELETE PLAYER] target:', playerId);
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+      const fetchUrls = [`/api/players/${encodeURIComponent(playerId)}`, `${targetUrl}/api/players/${encodeURIComponent(playerId)}`];
+
+      let res = null;
+      let errorText = '';
+
+      for (const u of fetchUrls) {
+        try {
+          res = await fetch(u, {
+            method: 'DELETE',
+            headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+          });
+          if (res && res.ok) break;
+          else if (res) {
+            errorText = await res.text();
+          }
+        } catch (err) {
+          errorText = err.message;
+        }
+      }
+
+      if (res && res.ok) {
+        console.log('[DELETE PLAYER] response status:', res.status);
+        if (typeof loadInitialData === 'function') {
+          const freshData = await loadInitialData();
+          console.log('[DELETE PLAYER] refreshed players count:', freshData?.players?.length);
+        }
+        if (sel === playerId) {
+          setSel(null);
+          if (setSelectedPlayerId) setSelectedPlayerId(null);
+        }
+      } else {
+        console.error('[DELETE PLAYER ERROR]', res ? res.status : 'Network', errorText);
+        alert(`تعذر حذف اللاعب: ${errorText || 'خطأ في الاتصال بالخادم'}`);
+      }
+    } catch (error) {
+      console.error('[DELETE PLAYER EXCEPTION]', error);
+      alert(`حدث خطأ أثناء عملية الحذف: ${error.message}`);
+    }
+  };
+
   const handleToggleFreeze = (p) => {
     setFreezeModal({
       player: p,
@@ -3722,6 +3775,29 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
             >
               <AnimIcon type="freeze" size={14} color="#fff" />
               {p.status === "مجمد" ? "إلغاء تجميد الاشتراك" : "تجميد الاشتراك"}
+            </button>
+            <button
+              onClick={() => handleDeletePlayer(p.id, p.name)}
+              style={{
+                width: "100%",
+                marginTop: 8,
+                background: "rgba(239,68,68,0.1)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                color: "#EF4444",
+                borderRadius: 8,
+                padding: "8px 16px",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                fontFamily: "'Cairo', sans-serif"
+              }}
+            >
+              <AnimIcon type="trash" size={14} color="#EF4444" />
+              حذف اللاعب نهائياً
             </button>
           </Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -4070,36 +4146,9 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                   <td style={{ padding: "11px 14px" }}><Chip text={p.status} color={p.status === "نشط" ? "#10B981" : p.status === "مجمد" ? "#3B82F6" : "#EF4444"}/></td>
                   <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 800, color: p.score > 80 ? "#10B981" : p.score > 60 ? "#F59E0B" : "#EF4444" }}>{p.score}</td>
                   <td style={{ padding: "11px 14px" }}>
-                    <button onClick={async (e) => { 
+                    <button onClick={(e) => { 
                       e.stopPropagation(); 
-                      if (window.confirm("هل أنت متأكد من حذف هذا اللاعب؟")) {
-                        const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-                        const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-                        const fetchUrls = [`/api/players/${p.id}`, `${targetUrl}/api/players/${p.id}`];
-
-                        let res = null;
-                        for (const u of fetchUrls) {
-                          try {
-                            res = await fetch(u, {
-                              method: 'DELETE',
-                              headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
-                            });
-                            if (res && res.ok) break;
-                          } catch (err) {}
-                        }
-
-                        if (res && res.ok) {
-                          if (typeof loadInitialData === 'function') {
-                            await loadInitialData();
-                          }
-                          if (sel === p.id) {
-                            setSel(null);
-                            if (setSelectedPlayerId) setSelectedPlayerId(null);
-                          }
-                        } else {
-                          alert("حدث خطأ أثناء حذف اللاعب");
-                        }
-                      }
+                      handleDeletePlayer(p.id, p.name);
                     }}
                       style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "rgba(239,68,68,.1)", color: "#EF4444", cursor: "pointer", display: "grid", placeItems: "center" }}>
                       <AnimIcon type="trash" size={13} color="#EF4444"/>

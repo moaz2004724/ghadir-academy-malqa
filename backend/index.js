@@ -760,9 +760,24 @@ app.delete('/api/players/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_A
   }
 });
 
+// --- REST Payment Endpoints ---
+
+// GET /api/payments
+app.get('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN', 'COACH', 'PARENT']), async (req, res) => {
+  try {
+    const payments = await prisma.payment.findMany({
+      orderBy: { date: 'desc' }
+    });
+    res.json(payments);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/payments — CREATE ONLY
 app.post('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN', 'COACH']), async (req, res) => {
   try {
-    const { id, playerId, playerName, coachId, coachName, type, month, amount, date, note, discount, packageName, sessionsCount } = req.body;
+    const { playerId, playerName, coachId, coachName, type, month, amount, date, note, discount, packageName, sessionsCount } = req.body;
     const resolvedDiscount = (discount !== undefined && discount !== null && !isNaN(discount)) ? parseFloat(discount) : 0;
     const resolvedSessions = (sessionsCount !== undefined && sessionsCount !== null && !isNaN(sessionsCount)) ? parseInt(sessionsCount) : 12;
 
@@ -779,48 +794,71 @@ app.post('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN'
       return res.status(400).json({ error: 'اللاعب غير موجود في النظام' });
     }
 
-    const existingPayment = id ? await prisma.payment.findUnique({ where: { id } }) : null;
-    let payment;
-    if (existingPayment) {
-      payment = await prisma.payment.update({
-        where: { id },
-        data: { 
-          playerId: validPlayerId, 
-          playerName, 
-          coachId, 
-          coachName, 
-          type: type || 'اشتراك', 
-          month: month || 'الشهر الحالي', 
-          amount: parseFloat(amount || 0),
-          discount: resolvedDiscount,
-          date: parseSafeDate(date), 
-          note,
-          packageName,
-          sessionsCount: resolvedSessions
-        }
-      });
-    } else {
-      payment = await prisma.payment.create({
-        data: { 
-          ...(id ? { id } : {}), 
-          playerId: validPlayerId, 
-          playerName, 
-          coachId, 
-          coachName, 
-          type: type || 'اشتراك', 
-          month: month || 'الشهر الحالي', 
-          amount: parseFloat(amount || 0),
-          discount: resolvedDiscount,
-          date: parseSafeDate(date), 
-          note,
-          packageName,
-          sessionsCount: resolvedSessions
-        }
-      });
-    }
-    res.json(payment);
+    const payment = await prisma.payment.create({
+      data: { 
+        playerId: validPlayerId, 
+        playerName, 
+        coachId, 
+        coachName, 
+        type: type || 'اشتراك', 
+        month: month || 'الشهر الحالي', 
+        amount: parseFloat(amount || 0),
+        discount: resolvedDiscount,
+        date: parseSafeDate(date), 
+        note,
+        packageName,
+        sessionsCount: resolvedSessions
+      }
+    });
+
+    res.status(201).json(payment);
   } catch (e) {
-    console.error("Payment error:", e);
+    console.error("Payment create error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/payments/:id — UPDATE ONLY
+app.put('/api/payments/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  const p = req.body;
+  try {
+    const existing = await prisma.payment.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'إيصال الدفع غير موجود' });
+    }
+
+    const updatedPayment = await prisma.payment.update({
+      where: { id },
+      data: {
+        amount: p.amount !== undefined ? parseFloat(p.amount) : existing.amount,
+        discount: p.discount !== undefined ? parseFloat(p.discount) : existing.discount,
+        note: p.note !== undefined ? p.note : existing.note,
+        type: p.type !== undefined ? p.type : existing.type,
+        month: p.month !== undefined ? p.month : existing.month
+      }
+    });
+
+    res.json(updatedPayment);
+  } catch (e) {
+    console.error("Payment update error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/payments/:id — DELETE ONLY
+app.delete('/api/payments/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await prisma.payment.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'إيصال الدفع غير موجود' });
+    }
+
+    await prisma.payment.delete({ where: { id } });
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error("Payment delete error:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -867,38 +905,58 @@ app.post('/api/attendance', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMI
   }
 });
 
+// --- REST Coach Endpoints ---
+
+// GET /api/coaches
+app.get('/api/coaches', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN', 'COACH', 'PARENT']), async (req, res) => {
+  try {
+    const coachesRaw = await prisma.coach.findMany({
+      include: {
+        user: true,
+        group: true
+      }
+    });
+
+    const coaches = coachesRaw.map(c => ({
+      id: c.id,
+      userId: c.userId,
+      name: c.user?.name || '',
+      email: c.user?.email || '',
+      phone: c.user?.phone || '',
+      specialty: c.specialty || '',
+      exp: c.exp,
+      cert: c.cert,
+      salary: c.salary,
+      groupId: c.groupId,
+      groupName: c.group?.name || '',
+      perms: c.perms
+    }));
+
+    res.json(coaches);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/coaches — CREATE ONLY
 app.post('/api/coaches', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
   const c = req.body;
   try {
-    // 1. Upsert User
-    const userUpdate = { name: c.name, role: 'COACH' };
-    if (c.password) {
-      const isBcrypt = c.password.startsWith('$2a$') || c.password.startsWith('$2b$');
-      userUpdate.password = isBcrypt 
-        ? c.password 
-        : bcrypt.hashSync(c.password, 10);
-      if (!isBcrypt) {
-        userUpdate.encryptedPassword = encryptPassword(c.password);
-      }
-    }
-    
     const plainPassword = c.password || 'Coach@1234';
     const isBcryptCreate = plainPassword.startsWith('$2a$') || plainPassword.startsWith('$2b$');
-    const userCreate = { 
-      email: c.email, 
-      password: isBcryptCreate ? plainPassword : bcrypt.hashSync(plainPassword, 10), 
-      encryptedPassword: isBcryptCreate ? null : encryptPassword(plainPassword),
-      name: c.name, 
-      role: 'COACH' 
-    };
+    const email = c.email || `coach_${Date.now()}@ghadirsports.sa`;
 
-    const user = await prisma.user.upsert({
-      where: { email: c.email },
-      update: userUpdate,
-      create: userCreate
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: isBcryptCreate ? plainPassword : bcrypt.hashSync(plainPassword, 10),
+        encryptedPassword: isBcryptCreate ? null : encryptPassword(plainPassword),
+        name: c.name,
+        phone: c.phone || null,
+        role: 'COACH'
+      }
     });
 
-    // 2. Resolve Unique Constraint on groupId in Coach table
     let validGroupId = null;
     if (c.groupId && c.groupId !== 'none') {
       const groupExists = await prisma.group.findUnique({ where: { id: c.groupId } });
@@ -907,30 +965,15 @@ app.post('/api/coaches', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
 
     if (validGroupId) {
       await prisma.coach.updateMany({
-        where: { 
-          groupId: validGroupId,
-          NOT: { id: c.id || 'new' }
-        },
+        where: { groupId: validGroupId },
         data: { groupId: null }
       });
     }
 
-    // 3. Upsert Coach (including exp, cert, salary)
-    const coach = await prisma.coach.upsert({
-      where: { id: c.id || 'new' },
-      update: { 
-        specialty: c.specialty, 
-        perms: c.perms, 
-        salary: c.salary ? parseFloat(c.salary) : null,
-        exp: c.exp ? parseInt(c.exp) : null,
-        cert: c.cert,
-        user: { connect: { id: user.id } },
-        group: validGroupId ? { connect: { id: validGroupId } } : { disconnect: true }
-      },
-      create: { 
-        id: c.id, 
-        specialty: c.specialty, 
-        perms: c.perms, 
+    const coach = await prisma.coach.create({
+      data: {
+        specialty: c.specialty,
+        perms: c.perms,
         salary: c.salary ? parseFloat(c.salary) : null,
         exp: c.exp ? parseInt(c.exp) : null,
         cert: c.cert,
@@ -939,32 +982,102 @@ app.post('/api/coaches', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
       }
     });
 
-    // 4. Synchronize Group table's coachId
-    await prisma.group.updateMany({
-      where: { 
-        coachId: coach.id,
-        NOT: { id: c.groupId || 'none' }
-      },
-      data: { coachId: null }
-    });
-
-    if (c.groupId) {
-      await prisma.group.updateMany({
-        where: { id: c.groupId },
-        data: { coachId: null }
-      });
+    if (validGroupId) {
       await prisma.group.update({
-        where: { id: c.groupId },
-        data: { 
-          coachId: coach.id,
-          coach: { connect: { id: coach.id } } 
-        }
+        where: { id: validGroupId },
+        data: { coachId: coach.id }
       });
     }
 
-    res.json(coach);
+    res.status(201).json({
+      id: coach.id,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      specialty: coach.specialty,
+      groupId: coach.groupId
+    });
   } catch (e) {
-    console.error("Coach upsert error:", e);
+    console.error("Coach create error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/coaches/:id — UPDATE ONLY
+app.put('/api/coaches/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  const c = req.body;
+  try {
+    const existing = await prisma.coach.findUnique({ where: { id }, include: { user: true } });
+    if (!existing) {
+      return res.status(404).json({ error: 'المدرب غير موجود' });
+    }
+
+    if (existing.userId) {
+      const userUpdate = {};
+      if (c.name) userUpdate.name = c.name;
+      if (c.phone !== undefined) userUpdate.phone = c.phone;
+      if (c.email) userUpdate.email = c.email;
+      if (c.password) {
+        const isBcrypt = c.password.startsWith('$2a$') || c.password.startsWith('$2b$');
+        userUpdate.password = isBcrypt ? c.password : bcrypt.hashSync(c.password, 10);
+        if (!isBcrypt) userUpdate.encryptedPassword = encryptPassword(c.password);
+      }
+      await prisma.user.update({ where: { id: existing.userId }, data: userUpdate });
+    }
+
+    let validGroupId = c.groupId !== undefined ? c.groupId : existing.groupId;
+    if (validGroupId === 'none') validGroupId = null;
+
+    if (validGroupId && validGroupId !== existing.groupId) {
+      await prisma.coach.updateMany({
+        where: { groupId: validGroupId, NOT: { id } },
+        data: { groupId: null }
+      });
+    }
+
+    const updatedCoach = await prisma.coach.update({
+      where: { id },
+      data: {
+        specialty: c.specialty !== undefined ? c.specialty : existing.specialty,
+        salary: c.salary !== undefined ? (c.salary ? parseFloat(c.salary) : null) : existing.salary,
+        exp: c.exp !== undefined ? (c.exp ? parseInt(c.exp) : null) : existing.exp,
+        cert: c.cert !== undefined ? c.cert : existing.cert,
+        groupId: validGroupId
+      }
+    });
+
+    if (validGroupId) {
+      await prisma.group.update({
+        where: { id: validGroupId },
+        data: { coachId: id }
+      });
+    }
+
+    res.json(updatedCoach);
+  } catch (e) {
+    console.error("Coach update error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/coaches/:id — DELETE ONLY
+app.delete('/api/coaches/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await prisma.coach.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'المدرب غير موجود' });
+    }
+
+    await prisma.coach.delete({ where: { id } });
+    if (existing.userId) {
+      await prisma.user.delete({ where: { id: existing.userId } }).catch(() => {});
+    }
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error("Coach delete error:", e);
     res.status(500).json({ error: e.message });
   }
 });

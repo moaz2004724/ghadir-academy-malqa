@@ -3234,16 +3234,88 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t }) {
   ];
 
   const save = () => {
-    if (!form.name.trim()) return;
+    if (!form.name || !form.name.trim()) return;
+
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+
     if (modal === "add") {
-      const id = `c${Date.now()}`;
-      const email = `${form.name.split(" ")[0].toLowerCase()}${Math.floor(Math.random()*1000)}@ghadirsports.sa`;
-      const password = `Ghadir@${Math.floor(Math.random()*9000)+1000}`;
-      setCoaches(c => [...c, { ...form, id, email, password, joined: getLocalDateString(new Date()) }]);
+      const payload = {
+        name: form.name,
+        phone: form.phone || "",
+        email: form.email || `${form.name.split(" ")[0].toLowerCase()}${Math.floor(Math.random()*1000)}@ghadirsports.sa`,
+        password: form.password || `Ghadir@${Math.floor(Math.random()*9000)+1000}`,
+        specialty: form.specialty || "",
+        groupId: form.groupId || null,
+        exp: form.exp ? parseInt(form.exp) : 0,
+        cert: form.cert || "",
+        salary: form.salary ? parseFloat(form.salary) : 0,
+        perms: form.perms
+      };
+
+      const fetchUrls = ['/api/coaches', `${targetUrl}/api/coaches`];
+      (async () => {
+        let res = null;
+        for (const u of fetchUrls) {
+          try {
+            res = await fetch(u, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+              },
+              body: JSON.stringify(payload)
+            });
+            if (res && res.ok) break;
+          } catch (e) {}
+        }
+        if (res && res.ok) {
+          if (typeof loadInitialData === 'function') loadInitialData();
+          setModal(null);
+          if (sel) setSel(null);
+        } else {
+          alert("حدث خطأ أثناء إضافة المدرب");
+        }
+      })();
+    } else {
+      const payload = {
+        name: form.name,
+        phone: form.phone || "",
+        email: form.email || "",
+        password: form.password || "",
+        specialty: form.specialty || "",
+        groupId: form.groupId || null,
+        exp: form.exp ? parseInt(form.exp) : 0,
+        cert: form.cert || "",
+        salary: form.salary ? parseFloat(form.salary) : 0,
+        perms: form.perms
+      };
+
+      const fetchUrls = [`/api/coaches/${form.id}`, `${targetUrl}/api/coaches/${form.id}`];
+      (async () => {
+        let res = null;
+        for (const u of fetchUrls) {
+          try {
+            res = await fetch(u, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+              },
+              body: JSON.stringify(payload)
+            });
+            if (res && res.ok) break;
+          } catch (e) {}
+        }
+        if (res && res.ok) {
+          if (typeof loadInitialData === 'function') loadInitialData();
+          setModal(null);
+          if (sel) setSel(null);
+        } else {
+          alert("حدث خطأ أثناء تعديل بيانات المدرب");
+        }
+      })();
     }
-    else setCoaches(c => c.map(x => x.id === form.id ? form : x));
-    setModal(null);
-    if (sel) setSel(null);
   };
 
   const togglePerm = (coachId, permKey) => {
@@ -4694,13 +4766,66 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
       }
     }
 
-    setPayments(ps => [...ps, ...newPayments]);
-    setModal(false);
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+
+    (async () => {
+      for (const item of newPayments) {
+        const payload = { ...item };
+        delete payload.id;
+        const fetchUrls = ['/api/payments', `${targetUrl}/api/payments`];
+        for (const u of fetchUrls) {
+          try {
+            const res = await fetch(u, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+              },
+              body: JSON.stringify(payload)
+            });
+            if (res && res.ok) break;
+          } catch (e) {}
+        }
+      }
+      if (typeof loadInitialData === 'function') {
+        await loadInitialData();
+      }
+      setModal(false);
+    })();
   };
 
   const saveEdit = () => {
-    setPayments(ps => ps.map(x => x.id === editForm.id ? { ...editForm, amount: +editForm.amount, discount: +editForm.discount || 0 } : x));
-    setEditModalPay(null);
+    if (!editForm || !editForm.id) return;
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+    const payload = {
+      amount: +editForm.amount,
+      discount: +editForm.discount || 0,
+      note: editForm.note,
+      type: editForm.type,
+      month: editForm.month
+    };
+    const fetchUrls = [`/api/payments/${editForm.id}`, `${targetUrl}/api/payments/${editForm.id}`];
+    (async () => {
+      for (const u of fetchUrls) {
+        try {
+          const res = await fetch(u, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            },
+            body: JSON.stringify(payload)
+          });
+          if (res && res.ok) break;
+        } catch (e) {}
+      }
+      if (typeof loadInitialData === 'function') {
+        await loadInitialData();
+      }
+      setEditModalPay(null);
+    })();
   };
 
   const payPlayer = players.find(p => p.id === form.playerId);
@@ -5048,24 +5173,44 @@ function AdminPrices({ prices, setPrices, t, groups, setGroups }) {
     }
   };
 
-  const handleSave = () => {
-    const updatedPrices = { ...prices };
-    Object.keys(prices).forEach(k => {
-      if (form[k] !== undefined) {
-        updatedPrices[k] = form[k];
-      }
-    });
-    setPrices(updatedPrices);
+  const handleSave = async () => {
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
 
-    if (groups && setGroups) {
-      setGroups(prevGroups => prevGroups.map(g => {
-        const p8 = form[`group_${g.id}_8`] !== undefined ? parseFloat(form[`group_${g.id}_8`]) : 250;
-        const p12 = form[`group_${g.id}_12`] !== undefined ? parseFloat(form[`group_${g.id}_12`]) : 350;
-        const p16 = form[`group_${g.id}_16`] !== undefined ? parseFloat(form[`group_${g.id}_16`]) : 450;
-        return { ...g, price8: p8, price12: p12, price16: p16 };
-      }));
+    for (const g of (groups || [])) {
+      const p8 = form[`group_${g.id}_8`] !== undefined ? parseFloat(form[`group_${g.id}_8`]) : g.price8;
+      const p12 = form[`group_${g.id}_12`] !== undefined ? parseFloat(form[`group_${g.id}_12`]) : g.price12;
+      const p16 = form[`group_${g.id}_16`] !== undefined ? parseFloat(form[`group_${g.id}_16`]) : g.price16;
+
+      const groupPayload = {
+        id: g.id,
+        name: g.name,
+        color: g.color,
+        coachId: g.coachId,
+        price8: p8,
+        price12: p12,
+        price16: p16
+      };
+
+      const fetchUrls = ['/api/groups', `${targetUrl}/api/groups`];
+      for (const u of fetchUrls) {
+        try {
+          const res = await fetch(u, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            },
+            body: JSON.stringify(groupPayload)
+          });
+          if (res && res.ok) break;
+        } catch (e) {}
+      }
     }
 
+    if (typeof loadInitialData === 'function') {
+      await loadInitialData();
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2200);
   };

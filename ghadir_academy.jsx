@@ -1855,8 +1855,12 @@ export default function App() {
 
         if (res && res.ok) {
           const data = await res.json();
-          console.log("[INITIAL DATA] players received:", data.players?.length);
-          console.log("[INITIAL DATA] FINAL_UI_TEST_001 found:", data.players?.some(p => p.name === "FINAL_UI_TEST_001" || p.id === "FINAL_UI_TEST_001"));
+          console.log("[REAL BROWSER FETCH]", {
+            token: !!savedToken,
+            status: res ? res.status : null,
+            players: data.players?.length,
+            testPlayer: data.players?.find(p => p.name === "BROWSER_REAL_TEST_001" || p.name === "FINAL_UI_TEST_001")
+          });
           
           // On background polls, skip setting state if a write happened during the fetch
           if (!isFirstFetchRef.current && pendingSyncsRef.current > 0) {
@@ -1890,7 +1894,7 @@ export default function App() {
                 password: migrated.password || `ghadir_${phone.slice(-4)}`
               };
             });
-            console.log("[STATE] setting players:", repaired.length);
+            console.trace("[REAL BROWSER setPlayers]", { count: repaired.length });
             setPlayers(repaired);
           }
           if (data.coaches) setCoaches(data.coaches.map(migrateItem));
@@ -2010,6 +2014,7 @@ export default function App() {
     },
     players,
     setPlayers: (val) => {
+      console.trace("[REAL BROWSER shared.setPlayers]", { type: typeof val, isArray: Array.isArray(val) });
       if (typeof val === 'function') {
         markLocalWrite();
         setPlayers(prev => {

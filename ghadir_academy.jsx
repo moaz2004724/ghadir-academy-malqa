@@ -1381,6 +1381,9 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
     }
 
     if (loggedInUser && token) {
+      // Clear ALL old cached data so server becomes single source of truth
+      ['ghadir_players','ghadir_coaches','ghadir_groups','ghadir_parents','ghadir_payments','ghadir_attendance','ghadir_coachesAttendance','ghadir_evals','ghadir_messages','ghadir_trainings'].forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('ghadir_token', token);
       sessionStorage.setItem('ghadir_token', token);
       localStorage.setItem('ghadir_logged_user', JSON.stringify(loggedInUser));
       onLogin(loggedInUser, token);
@@ -1644,7 +1647,7 @@ function Shell({ title, subtitle, color, icon, tabs, activeTab, setActiveTab, on
 
 /* ═══ ROOT APP ════════════════════════════════════════ */
 export default function App() {
-  const [token, setToken] = useState(() => sessionStorage.getItem('ghadir_token') || "");
+  const [token, setToken] = useState(() => localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token') || "");
   const [user, setUser]         = useState(() => {
     const saved = localStorage.getItem('ghadir_logged_user');
     if (!saved) return null;
@@ -1655,9 +1658,9 @@ export default function App() {
       return null;
     }
   });
-  const [attendance, setAttendance] = useState(() => JSON.parse(localStorage.getItem('ghadir_attendance') || '[]'));
-  const [evals, setEvals] = useState(() => JSON.parse(localStorage.getItem('ghadir_evals') || '[]'));
-  const [messages, setMessages] = useState(() => JSON.parse(localStorage.getItem('ghadir_messages') || '[]'));
+  const [attendance, setAttendance] = useState([]);
+  const [evals, setEvals] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [prices, setPrices] = useState(() => JSON.parse(localStorage.getItem('ghadir_prices') || JSON.stringify(PRICE_LIST)));
   const DEFAULT_SPORTS = [
     { id: "g-football-juniors", name: "كرة القدم - الصغار (5-10 سنوات)", color: "#16A34A", price8: 250, price12: 350, price16: 450 },
@@ -1694,7 +1697,7 @@ export default function App() {
     });
     return merged;
   });
-  const [coachesAttendance, setCoachesAttendance] = useState(() => JSON.parse(localStorage.getItem('ghadir_coachesAttendance') || '[]'));
+  const [coachesAttendance, setCoachesAttendance] = useState([]);
 
   const [groups, setGroups] = useState(() => {
     const local = JSON.parse(localStorage.getItem('ghadir_groups') || '[]');
@@ -1710,10 +1713,10 @@ export default function App() {
     });
     return merged;
   });
-  const [coaches, setCoaches] = useState(() => JSON.parse(localStorage.getItem('ghadir_coaches') || '[]'));
-  const [players, setPlayers] = useState(() => JSON.parse(localStorage.getItem('ghadir_players') || '[]'));
-  const [parents, setParents] = useState(() => JSON.parse(localStorage.getItem('ghadir_parents') || '[]'));
-  const [payments, setPayments] = useState(() => JSON.parse(localStorage.getItem('ghadir_payments') || '[]'));
+  const [coaches, setCoaches] = useState([]);
+  const [players, setPlayers] = useState([]);
+  const [parents, setParents] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [theme, setTheme] = useState(() => localStorage.getItem('ghadir_theme') || "dark");
 
   const [syncStatus, setSyncStatus] = useState("synced"); // 'synced', 'syncing', 'error'
@@ -1863,38 +1866,47 @@ export default function App() {
     });
   }, []);
 
-  // Fetch from API (with automatic background polling every 6s)
+  const isFirstFetchRef = useRef(true);
+
+  // Fetch from API (with automatic background polling)
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
-      // Skip background update if we are actively syncing or a local write occurred recently
-      if (syncStatus === "syncing" || pendingSyncsRef.current > 0 || Date.now() - lastLocalWriteRef.current < 8000) {
-        return;
+    const fetchData = async (isInitial = false) => {
+      // On first fetch after login, ALWAYS fetch (bypass write lock)
+      // On subsequent background polls, skip if actively syncing
+      if (!isInitial && !isFirstFetchRef.current) {
+        if (pendingSyncsRef.current > 0 || Date.now() - lastLocalWriteRef.current < 3000) {
+          return;
+        }
       }
+
       try {
-        const savedToken = token || sessionStorage.getItem('ghadir_token');
+        const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+        if (!savedToken) {
+          console.warn("No auth token available for fetchData");
+          return;
+        }
+
         const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
         let res = null;
         try {
           res = await fetch(`${targetUrl}/api/initial-data`, {
-            headers: {
-              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-            }
+            headers: { 'Authorization': `Bearer ${savedToken}` }
           });
         } catch (err) {
-          res = await fetch(`/api/initial-data`, {
-            headers: {
-              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-            }
-          });
+          try {
+            res = await fetch(`/api/initial-data`, {
+              headers: { 'Authorization': `Bearer ${savedToken}` }
+            });
+          } catch (err2) {}
         }
 
         if (res && res.ok) {
           const data = await res.json();
           
-          // Double check right before setting the state in case a write happened while the fetch was in flight
-          if (Date.now() - lastLocalWriteRef.current < 8000 || pendingSyncsRef.current > 0) {
+          // On background polls, skip setting state if a write happened during the fetch
+          if (!isFirstFetchRef.current && pendingSyncsRef.current > 0) {
             return;
           }
 
@@ -1939,20 +1951,26 @@ export default function App() {
           if (data.messages) setMessages(data.messages);
           if (data.trainings) setTrainings(data.trainings);
           if (data.parents) setParents(data.parents.map(migrateItem));
+          
+          isFirstFetchRef.current = false;
           setSyncStatus("synced");
+        } else if (res && res.status === 401) {
+          console.warn("Auth token expired or invalid for initial-data");
+          setSyncStatus("error");
         }
       } catch (e) {
         console.error("API Fetch Error:", e);
       }
     };
 
-    fetchData();
+    // First fetch is always immediate and bypasses all guards
+    fetchData(true);
 
-    const interval = setInterval(fetchData, 4000);
-    const handleFocus = () => fetchData();
+    const interval = setInterval(() => fetchData(false), 5000);
+    const handleFocus = () => fetchData(false);
     const handleVisibility = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchData();
+        fetchData(false);
       }
     };
     if (typeof window !== 'undefined') {
@@ -2296,7 +2314,7 @@ function AdminPortal({ user, onLogout, groups, setGroups, coaches, setCoaches, p
   return (
     <Shell title="لوحة الإدارة" subtitle="أكاديمية غدير الرياضية - فرع الملقا" color="#2563EB" icon="dashboard" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge="مدير عام" user={user} t={t} syncStatus={syncStatus}>
       {tab === "overview"  && <AdminOverview players={players} coaches={coaches} groups={groups} payments={payments} attendance={attendance} trainings={trainings} t={t} parents={parents} messages={messages} setMessages={setMessages} setTab={setTab} setSelectedPlayerId={setSelectedPlayerId} />}
-      {tab === "teams"     && <AdminTeams groups={groups} setGroups={setGroups} coaches={coaches} players={players} t={t} />}
+      {tab === "teams"     && <AdminTeams groups={groups} setGroups={setGroups} coaches={coaches} players={players} setPlayers={setPlayers} t={t} />}
       {tab === "attendance" && <AdminAttendance groups={groups} players={players} coaches={coaches} attendance={attendance} setAttendance={setAttendance} coachesAttendance={coachesAttendance} setCoachesAttendance={setCoachesAttendance} t={t} payments={payments} trainings={trainings} />}
       {tab === "coaches"   && <AdminCoaches coaches={coaches} setCoaches={setCoaches} groups={groups} players={players} payments={payments} t={t} />}
       {tab === "players"   && <AdminPlayers players={players} setPlayers={setPlayers} groups={groups} parents={parents} evals={evals} coaches={coaches} t={t} trainings={trainings} attendance={attendance} payments={payments} selectedPlayerId={selectedPlayerId} setSelectedPlayerId={setSelectedPlayerId} />}
@@ -3080,7 +3098,7 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
   );
 }
 /* ── Admin Teams (NEW) ──────────────────────────────── */
-function AdminTeams({ groups, setGroups, coaches, players, t }) {
+function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t }) {
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({ name: "", coachId: "", color: "#06B6D4", price: 350 });
   const [selGroup, setSelGroup] = useState(null);
@@ -6680,7 +6698,7 @@ function ParentPortal({ user, onLogout, players, groups, coaches, parents, payme
   // 1. Identify the parent from the dynamic parents list
   const parent = parents.find(p => p.id === user.id) || { name: user.name, id: user.id };
   
-  // 2. Filter players by parentId / userId / email / phone
+  // 2. Filter players by parentId / userId / email / phone or parent-filtered list
   const userPhone = user.phone || (user.email ? user.email.replace(/\D/g, '') : "");
   const myPlayers = (players || []).filter(p => {
     if (!p) return false;
@@ -6689,7 +6707,8 @@ function ParentPortal({ user, onLogout, players, groups, coaches, parents, payme
     if (user.id && String(p.userId) === String(user.id)) return true;
     if (user.email && p.email && p.email.toLowerCase() === user.email.toLowerCase()) return true;
     if (userPhone && p.phone && (String(p.phone).includes(userPhone) || userPhone.includes(String(p.phone)))) return true;
-    if (players.length === 1) return true;
+    if (userPhone && p.parentPhone && (String(p.parentPhone).includes(userPhone) || userPhone.includes(String(p.parentPhone)))) return true;
+    if (String(user.role).toLowerCase() === 'parent') return true;
     return false;
   });
   

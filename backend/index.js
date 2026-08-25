@@ -106,15 +106,6 @@ const authenticateToken = async (req, res, next) => {
     }
   }
 
-  // Graceful fallback for authenticated admin operations
-  const defaultAdmin = await prisma.user.findFirst({
-    where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] } }
-  });
-  if (defaultAdmin) {
-    req.user = defaultAdmin;
-    return next();
-  }
-
   return res.status(401).json({ error: 'من فضلك سجل دخولك أولاً' });
 };
 
@@ -415,7 +406,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
     const [groups, coachesRaw, playersRaw, paymentsRaw, attendanceRaw, evalsRaw, messagesRaw, trainingsRaw, parentsRaw] = await Promise.all([
       prisma.group.findMany(),
       prisma.coach.findMany({ include: { user: true } }),
-      prisma.player.findMany(),
+      prisma.player.findMany({ include: { parent: { include: { user: true } } } }),
       prisma.payment.findMany(),
       prisma.attendance.findMany(),
       prisma.evaluation.findMany(),
@@ -447,10 +438,16 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
       };
     });
 
-    // Remove passwords/sensitive fields from players
+    // Enrich players with email/phone from parent's user account
     const players = playersRaw.map(p => {
-      const { password, ...pWithoutPassword } = p;
-      return pWithoutPassword;
+      const { password, parent: parentRel, ...pClean } = p;
+      const parentEmail = parentRel?.user?.email || '';
+      const parentPhone = parentRel?.user?.phone || p.phone || '';
+      return {
+        ...pClean,
+        email: parentEmail,
+        parentPhone: parentPhone,
+      };
     });
 
     // Filter based on roles (Role-Based Access Control)

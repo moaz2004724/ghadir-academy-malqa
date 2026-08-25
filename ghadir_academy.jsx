@@ -1650,7 +1650,15 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token') || "");
   const [user, setUser]         = useState(() => {
     const saved = localStorage.getItem('ghadir_logged_user');
-    if (!saved) return null;
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    
+    if (!saved || !savedToken) {
+      localStorage.removeItem('ghadir_logged_user');
+      localStorage.removeItem('ghadir_token');
+      sessionStorage.removeItem('ghadir_token');
+      return null;
+    }
+    
     try {
       return JSON.parse(saved);
     } catch(e) {
@@ -1957,6 +1965,11 @@ export default function App() {
         } else if (res && res.status === 401) {
           console.warn("Auth token expired or invalid for initial-data");
           setSyncStatus("error");
+          setUser(null);
+          setToken("");
+          localStorage.removeItem('ghadir_logged_user');
+          localStorage.removeItem('ghadir_token');
+          sessionStorage.removeItem('ghadir_token');
         }
       } catch (e) {
         console.error("API Fetch Error:", e);
@@ -2283,10 +2296,10 @@ export default function App() {
       {!user
         ? <LoginPage onLogin={(u, tok) => { setUser(u); if (tok) setToken(tok); }} players={players} coaches={coaches} t={t} />
         : (String(user.role).toLowerCase() === "admin" || String(user.role).toLowerCase() === "super_admin")
-          ? <AdminPortal  user={user} onLogout={() => { setUser(null); localStorage.removeItem('ghadir_logged_user'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
+          ? <AdminPortal  user={user} onLogout={() => { setUser(null); setToken(""); localStorage.removeItem('ghadir_logged_user'); localStorage.removeItem('ghadir_token'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
           : (String(user.role).toLowerCase() === "coach")
-            ? <CoachPortal  user={user} onLogout={() => { setUser(null); localStorage.removeItem('ghadir_logged_user'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
-            : <ParentPortal user={user} onLogout={() => { setUser(null); localStorage.removeItem('ghadir_logged_user'); sessionStorage.removeItem('ghadir_token'); }} {...shared} loginUser={user} />
+            ? <CoachPortal  user={user} onLogout={() => { setUser(null); setToken(""); localStorage.removeItem('ghadir_logged_user'); localStorage.removeItem('ghadir_token'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
+            : <ParentPortal user={user} onLogout={() => { setUser(null); setToken(""); localStorage.removeItem('ghadir_logged_user'); localStorage.removeItem('ghadir_token'); sessionStorage.removeItem('ghadir_token'); }} {...shared} loginUser={user} />
       }
     </div>
   );

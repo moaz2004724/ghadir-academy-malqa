@@ -1815,33 +1815,18 @@ export default function App() {
 
   const isFirstFetchRef = useRef(true);
 
-  // Fetch from API (with automatic background polling)
+  // Fetch from API (Clean Initial Load - Single Source of Truth)
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async (isInitial = false) => {
-      // On first fetch after login, ALWAYS fetch (bypass write lock)
-      // On subsequent background polls, skip if actively syncing
-      if (!isInitial && !isFirstFetchRef.current) {
-        if (pendingSyncsRef.current > 0 || Date.now() - lastLocalWriteRef.current < 15000) {
-          return;
-        }
-      }
-
+    const loadInitialData = async () => {
       try {
         const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-        console.log("[FETCH DATA] started");
-        console.log("[AUTH] token exists:", Boolean(savedToken), "| length:", savedToken ? savedToken.length : 0);
-        if (!savedToken) {
-          console.warn("No auth token available for fetchData");
-          return;
-        }
+        if (!savedToken) return;
 
         const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
         let res = null;
-        console.log("[API ORDER] REQUEST START: GET /api/initial-data");
         
-        // Try relative endpoint first to use Vercel proxy rewrite, fallback to direct Railway URL
         const fetchUrls = ['/api/initial-data', `${targetUrl}/api/initial-data`];
         for (const u of fetchUrls) {
           try {
@@ -1849,51 +1834,16 @@ export default function App() {
               headers: { 'Authorization': `Bearer ${savedToken}` }
             });
             if (res && res.ok) break;
-          } catch (err) {
-            console.warn(`Fetch failed for ${u}:`, err.message);
-          }
+          } catch (err) {}
         }
-
-        console.log("[INITIAL DATA] status:", res ? res.status : "NO_RES");
 
         if (res && res.ok) {
           const data = await res.json();
-          
-          // On background polls, skip setting state if a write happened during the fetch
-          if (!isFirstFetchRef.current && pendingSyncsRef.current > 0) {
-            return;
-          }
-
-          const migrateItem = (item) => {
-            let email = item.email || "";
-            let password = item.password || "";
-            let changed = false;
-            if (email.includes("royals") || email.includes("royal")) {
-              email = email.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/@royals\.sa/g, "@ghadirsports.sa").replace(/@royalsports\.sa/g, "@ghadirsports.sa").replace(/@royal\.sa/g, "@ghadirsports.sa");
-              changed = true;
-            }
-            if (password.includes("royals") || password.includes("Royals") || password.includes("Royal") || password.includes("royal")) {
-              password = password.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/Royals@/g, "Ghadir@").replace(/Royal@/g, "Ghadir@");
-              changed = true;
-            }
-            return changed ? { ...item, email, password } : item;
-          };
 
           if (data.players && Array.isArray(data.players)) {
-            // Auto-repair missing logins/data for display
-            const repaired = data.players.map(p => {
-              const migrated = migrateItem(p);
-              if (migrated.email && migrated.password) return migrated;
-              const phone = migrated.phone || "0500000000";
-              return { 
-                ...migrated, 
-                email: migrated.email || `ghadir_${phone}@ghadirsports.sa`,
-                password: migrated.password || `ghadir_${phone.slice(-4)}`
-              };
-            });
-            setPlayers(repaired);
+            setPlayers(data.players);
           }
-          if (data.coaches) setCoaches(data.coaches.map(migrateItem));
+          if (data.coaches) setCoaches(data.coaches);
           if (data.groups) {
             const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
             setGroups(cleanGroups);
@@ -1904,60 +1854,25 @@ export default function App() {
           if (data.evals) setEvals(data.evals);
           if (data.messages) setMessages(data.messages);
           if (data.trainings) setTrainings(data.trainings);
-          if (data.parents) setParents(data.parents.map(migrateItem));
+          if (data.parents) setParents(data.parents);
           
-          isFirstFetchRef.current = false;
           setSyncStatus("synced");
         } else if (res && res.status === 401) {
-          console.warn("Auth token expired or invalid for initial-data");
           setSyncStatus("error");
           setUser(null);
           setToken("");
           localStorage.removeItem('ghadir_logged_user');
           localStorage.removeItem('ghadir_token');
           sessionStorage.removeItem('ghadir_token');
-        } else if (isInitial) {
-          // If initial fetch failed due to cold start / network issue, retry once after 1s
-          console.warn("Initial fetch returned non-ok status, retrying in 1s...");
-          setTimeout(() => fetchData(true), 1000);
-          return;
         }
       } catch (e) {
         console.error("API Fetch Error:", e);
-        if (isInitial) {
-          console.warn("Initial fetch error, retrying in 1s...");
-          setTimeout(() => fetchData(true), 1000);
-          return;
-        }
       } finally {
-        if (isInitial && isFirstFetchRef.current === false) {
-          setIsAppLoading(false);
-        }
+        setIsAppLoading(false);
       }
     };
 
-    // First fetch is always immediate and bypasses all guards
-    fetchData(true);
-
-    const interval = setInterval(() => fetchData(false), 5000);
-    const handleFocus = () => fetchData(false);
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchData(false);
-      }
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('focus', handleFocus);
-      document.addEventListener('visibilitychange', handleVisibility);
-    }
-
-    return () => {
-      clearInterval(interval);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('focus', handleFocus);
-        document.removeEventListener('visibilitychange', handleVisibility);
-      }
-    };
+    loadInitialData();
   }, [user, token]);
 
   useEffect(() => {
@@ -4007,7 +3922,27 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                   <td style={{ padding: "11px 14px" }}><Chip text={p.status} color={p.status === "نشط" ? "#10B981" : p.status === "مجمد" ? "#3B82F6" : "#EF4444"}/></td>
                   <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 800, color: p.score > 80 ? "#10B981" : p.score > 60 ? "#F59E0B" : "#EF4444" }}>{p.score}</td>
                   <td style={{ padding: "11px 14px" }}>
-                    <button onClick={e => { e.stopPropagation(); setPlayers(ps => ps.filter(x => x.id !== p.id)); }}
+                    <button onClick={e => { 
+                      e.stopPropagation(); 
+                      if (window.confirm("هل أنت تأكد من حذف هذا اللاعب؟")) {
+                        const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+                        const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+                        fetch(`${targetUrl}/api/players/${p.id}`, {
+                          method: 'DELETE',
+                          headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                        }).then(res => {
+                          if (res.ok) {
+                            if (typeof loadInitialData === 'function') {
+                              loadInitialData();
+                            } else if (typeof setPlayers === 'function') {
+                              fetch(`${targetUrl}/api/players`, {
+                                headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                              }).then(r => r.json()).then(data => { if (Array.isArray(data)) setPlayers(data); });
+                            }
+                          }
+                        });
+                      }
+                    }}
                       style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "rgba(239,68,68,.1)", color: "#EF4444", cursor: "pointer", display: "grid", placeItems: "center" }}>
                       <AnimIcon type="trash" size={13} color="#EF4444"/>
                     </button>
@@ -4128,19 +4063,46 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                 : `par_${phone}`;
               const generatedEmail = `ghadir_${phone}@ghadirsports.sa`;
               const generatedPass  = `ghadir_${phone.slice(-4)}`;
-              setPlayers(ps => [...ps, { 
-                ...form, 
-                id: `p${Date.now()}`, 
+              const payload = {
+                ...form,
                 parentId: resolvedParentId,
-                email: generatedEmail, 
-                password: generatedPass, 
-                score: +form.score || 80, 
-                attendancePct: 90, 
-                goals: 0, 
-                assists: 0, 
-                joinDate: getLocalDateString(new Date()) 
-              }]); 
-              setModal(null); 
+                email: generatedEmail,
+                password: generatedPass,
+                score: +form.score || 80,
+                attendancePct: 90,
+                goals: 0,
+                assists: 0,
+                joinDate: getLocalDateString(new Date())
+              };
+              delete payload.id;
+
+              const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+              const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+              fetch(`${targetUrl}/api/players`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+                },
+                body: JSON.stringify(payload)
+              })
+              .then(res => {
+                if (!res.ok) throw new Error("Failed to create player");
+                return res.json();
+              })
+              .then(() => {
+                if (typeof loadInitialData === 'function') {
+                  loadInitialData();
+                } else if (typeof setPlayers === 'function') {
+                  fetch(`${targetUrl}/api/players`, {
+                    headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                  }).then(r => r.json()).then(data => { if (Array.isArray(data)) setPlayers(data); });
+                }
+                setModal(null);
+              })
+              .catch(err => {
+                alert("حدث خطأ أثناء إضافة اللاعب");
+              });
             }} style={{ flex: 1 }}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="check" size={14} color="currentColor" /> إضافة وتوليد بيانات الدخول</span></Btn>
             <Btn variant="secondary" onClick={() => setModal(null)}>إلغاء</Btn>
           </div>

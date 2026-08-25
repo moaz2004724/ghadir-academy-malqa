@@ -1170,12 +1170,12 @@ const seedSportsAndTrainings = async () => {
     const targetGroups = [
       { id: 'g-football-juniors', name: 'كرة القدم - الصغار (5-10 سنوات)', color: '#16A34A', price8: 250, price12: 350, price16: 450 },
       { id: 'g-football-seniors', name: 'كرة القدم - الكبار (11-16 سنة)', color: '#15803D', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-swimming-boys', name: 'سباحة - بنين', color: '#0284C7', price8: 300, price12: 400, price16: 500 },
-      { id: 'g-swimming-girls', name: 'سباحة - بنات', color: '#0369A1', price8: 300, price12: 400, price16: 500 },
+      { id: 'g-swimming-boys', name: 'المسبح - بنين', color: '#0284C7', price8: 300, price12: 400, price16: 500 },
+      { id: 'g-swimming-girls', name: 'المسبح - بنات', color: '#0369A1', price8: 300, price12: 400, price16: 500 },
       { id: 'g-gymnastics', name: 'الجمباز', color: '#9333EA', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-karate', name: 'الكاراتيه', color: '#DC2626', price8: 250, price12: 350, price16: 450 },
+      { id: 'g-karate', name: 'الكاراتيه (بنين - بنات)', color: '#DC2626', price8: 250, price12: 350, price16: 450 },
       { id: 'g-basketball', name: 'كرة السلة', color: '#EA580C', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-boxing', name: 'البوكسينج', color: '#4B5563', price8: 250, price12: 350, price16: 450 }
+      { id: 'g-boxing', name: 'البوكسينج (بنين - بنات)', color: '#4B5563', price8: 250, price12: 350, price16: 450 }
     ];
 
     // Ensure all target groups exist in database
@@ -1248,16 +1248,16 @@ const seedSportsAndTrainings = async () => {
       await prisma.group.deleteMany({ where: { id: sg.id } });
     }
 
-    // 3. Ensure training schedules are seeded correctly
+    // 3. Ensure training schedules are seeded correctly for Al-Malqa branch
     const targetTrainings = [
-      { id: 't-football-juniors', groupId: 'g-football-juniors', days: ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"], time: "17:00", duration: 90, field: "ملعب A" },
-      { id: 't-football-seniors', groupId: 'g-football-seniors', days: ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"], time: "18:30", duration: 90, field: "ملعب A" },
-      { id: 't-swimming-boys', groupId: 'g-swimming-boys', days: ["السبت", "الاثنين", "الأربعاء"], time: "16:00", duration: 60, field: "المسبح" },
-      { id: 't-swimming-girls', groupId: 'g-swimming-girls', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:30", duration: 60, field: "المسبح" },
-      { id: 't-gymnastics', groupId: 'g-gymnastics', days: ["الأحد", "الاثنين", "الثلاثاء"], time: "16:00", duration: 60, field: "صالة الجمباز" },
-      { id: 't-karate', groupId: 'g-karate', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:00", duration: 60, field: "صالة الدفاع عن النفس" },
-      { id: 't-basketball', groupId: 'g-basketball', days: ["الأحد", "الثلاثاء", "الأربعاء"], time: "17:00", duration: 60, field: "الملعب الداخلي" },
-      { id: 't-boxing', groupId: 'g-boxing', days: ["السبت", "الاثنين", "الأربعاء"], time: "18:00", duration: 60, field: "صالة البوكسينج" }
+      { id: 't-football-juniors', groupId: 'g-football-juniors', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 90, field: "ملعب كرة القدم" },
+      { id: 't-football-seniors', groupId: 'g-football-seniors', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 90, field: "ملعب كرة القدم" },
+      { id: 't-swimming-boys', groupId: 'g-swimming-boys', days: ["الأحد", "الثلاثاء", "الخميس"], time: "15:00", duration: 120, field: "المسبح" },
+      { id: 't-swimming-girls', groupId: 'g-swimming-girls', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 120, field: "المسبح" },
+      { id: 't-gymnastics', groupId: 'g-gymnastics', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 60, field: "صالة الجمباز" },
+      { id: 't-karate', groupId: 'g-karate', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 60, field: "صالة الدفاع عن النفس" },
+      { id: 't-basketball', groupId: 'g-basketball', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:00", duration: 90, field: "الملعب الداخلي" },
+      { id: 't-boxing', groupId: 'g-boxing', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 60, field: "صالة البوكسينج" }
     ];
 
     let defaultCoach = await prisma.coach.findFirst();

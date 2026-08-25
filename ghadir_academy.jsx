@@ -495,7 +495,7 @@ const GhadirLogo = ({ size = 48, variant = "main" }) => {
   return (
     <img 
       src={src} 
-      alt="أكاديمية غدير - فرع النرجس" 
+      alt="أكاديمية غدير - فرع الملقا" 
       style={{ 
         width: size, 
         height: size, 
@@ -1386,7 +1386,7 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
               <GhadirLogo size={110} variant="white" />
             </div>
             <h1 style={{ fontSize: 36, fontWeight: 900, color: "#fff", marginBottom: 12, letterSpacing: "-.02em" }}>
-              أكاديمية <span style={{ color: "#EF4444" }}>غدير</span> الرياضية - فرع النرجس
+              أكاديمية <span style={{ color: "#EF4444" }}>غدير</span> الرياضية - فرع الملقا
             </h1>
             <p style={{ fontSize: 14, color: "#94A3B8", fontWeight: 600, maxWidth: 360, lineHeight: 1.6, marginBottom: 0 }}>
               أكاديمية كرة القدم الأولى لتطوير المواهب الناشئة وإدارتها بنظام إلكتروني متكامل
@@ -1478,7 +1478,7 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
             <GhadirLogo size={90} variant="white" />
           </div>
           <h1 style={{ fontSize: 34, fontWeight: 900, color: "#fff", marginBottom: 8 }}>
-            أكاديمية <span style={{ color: "#EF4444" }}>غدير</span> الرياضية - فرع النرجس
+            أكاديمية <span style={{ color: "#EF4444" }}>غدير</span> الرياضية - فرع الملقا
           </h1>
           <p style={{ fontSize: 13, color: "#94A3B8", fontWeight: 600 }}>أكاديمية رياضية — نظام الإدارة المتكامل</p>
         </div>
@@ -1620,47 +1620,53 @@ export default function App() {
   const DEFAULT_SPORTS = [
     { id: "g-football-juniors", name: "كرة القدم - الصغار (5-10 سنوات)", color: "#16A34A", price8: 250, price12: 350, price16: 450 },
     { id: "g-football-seniors", name: "كرة القدم - الكبار (11-16 سنة)", color: "#15803D", price8: 250, price12: 350, price16: 450 },
-    { id: "g-swimming-boys", name: "سباحة - بنين", color: "#0284C7", price8: 300, price12: 400, price16: 500 },
-    { id: "g-swimming-girls", name: "سباحة - بنات", color: "#0369A1", price8: 300, price12: 400, price16: 500 },
+    { id: "g-swimming-boys", name: "المسبح - بنين", color: "#0284C7", price8: 300, price12: 400, price16: 500 },
+    { id: "g-swimming-girls", name: "المسبح - بنات", color: "#0369A1", price8: 300, price12: 400, price16: 500 },
     { id: "g-gymnastics", name: "الجمباز", color: "#9333EA", price8: 250, price12: 350, price16: 450 },
-    { id: "g-karate", name: "الكاراتيه", color: "#DC2626", price8: 250, price12: 350, price16: 450 },
+    { id: "g-karate", name: "الكاراتيه (بنين - بنات)", color: "#DC2626", price8: 250, price12: 350, price16: 450 },
     { id: "g-basketball", name: "كرة السلة", color: "#EA580C", price8: 250, price12: 350, price16: 450 },
-    { id: "g-boxing", name: "البوكسينج", color: "#4B5563", price8: 250, price12: 350, price16: 450 }
+    { id: "g-boxing", name: "البوكسينج (بنين - بنات)", color: "#4B5563", price8: 250, price12: 350, price16: 450 }
   ];
 
   const DEFAULT_TRAININGS = [
-    { id: "t-football-juniors", groupId: "g-football-juniors", coachId: "c-royal-coach", days: ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"], time: "17:00", duration: 90, field: "ملعب A", isRecurring: true, type: "training", title: "تمرين كرة القدم - الصغار" },
-    { id: "t-football-seniors", groupId: "g-football-seniors", coachId: "c-royal-coach", days: ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"], time: "18:30", duration: 90, field: "ملعب A", isRecurring: true, type: "training", title: "تمرين كرة القدم - الكبار" },
-    { id: "t-swimming-boys", groupId: "g-swimming-boys", coachId: "c-royal-coach", days: ["السبت", "الاثنين", "الأربعاء"], time: "16:00", duration: 60, field: "المسبح", isRecurring: true, type: "training", title: "تمرين سباحة - بنين" },
-    { id: "t-swimming-girls", groupId: "g-swimming-girls", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:30", duration: 60, field: "المسبح", isRecurring: true, type: "training", title: "تمرين سباحة - بنات" },
-    { id: "t-gymnastics", groupId: "g-gymnastics", coachId: "c-royal-coach", days: ["الأحد", "الاثنين", "الثلاثاء"], time: "16:00", duration: 60, field: "صالة الجمباز", isRecurring: true, type: "training", title: "تمرين الجمباز" },
-    { id: "t-karate", groupId: "g-karate", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:00", duration: 60, field: "صالة الدفاع عن النفس", isRecurring: true, type: "training", title: "تمرين الكاراتيه" },
-    { id: "t-basketball", groupId: "g-basketball", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الأربعاء"], time: "17:00", duration: 60, field: "الملعب الداخلي", isRecurring: true, type: "training", title: "تمرين كرة السلة" },
-    { id: "t-boxing", groupId: "g-boxing", coachId: "c-royal-coach", days: ["السبت", "الاثنين", "الأربعاء"], time: "18:00", duration: 60, field: "صالة البوكسينج", isRecurring: true, type: "training", title: "تمرين البوكسينج" }
+    { id: "t-football-juniors", groupId: "g-football-juniors", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 90, field: "ملعب كرة القدم", isRecurring: true, type: "training", title: "تمرين كرة القدم - الصغار (5:00 - 6:30)" },
+    { id: "t-football-seniors", groupId: "g-football-seniors", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 90, field: "ملعب كرة القدم", isRecurring: true, type: "training", title: "تمرين كرة القدم - الكبار (6:30 - 8:00)" },
+    { id: "t-swimming-boys", groupId: "g-swimming-boys", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "15:00", duration: 120, field: "المسبح", isRecurring: true, type: "training", title: "تمرين المسبح - بنين (3:00 - 5:00)" },
+    { id: "t-swimming-girls", groupId: "g-swimming-girls", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 120, field: "المسبح", isRecurring: true, type: "training", title: "تمرين المسبح - بنات (5:00 - 7:00)" },
+    { id: "t-gymnastics", groupId: "g-gymnastics", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 60, field: "صالة الجمباز", isRecurring: true, type: "training", title: "تمرين الجمباز (6:30 - 7:30)" },
+    { id: "t-karate", groupId: "g-karate", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 60, field: "صالة الدفاع عن النفس", isRecurring: true, type: "training", title: "تمرين الكاراتيه (6:30 - 7:30)" },
+    { id: "t-basketball", groupId: "g-basketball", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:00", duration: 90, field: "الملعب الداخلي", isRecurring: true, type: "training", title: "تمرين كرة السلة (6:00 - 7:30)" },
+    { id: "t-boxing", groupId: "g-boxing", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 60, field: "صالة البوكسينج", isRecurring: true, type: "training", title: "تمرين البوكسينج (5:00 - 6:00)" }
   ];
 
   const [trainings, setTrainings] = useState(() => {
     const local = JSON.parse(localStorage.getItem('ghadir_trainings') || '[]');
-    const next = [...local];
-    DEFAULT_TRAININGS.forEach(dt => {
-      if (!next.some(x => x.id === dt.id || x.groupId === dt.groupId)) {
-        next.push(dt);
+    const merged = DEFAULT_TRAININGS.map(dt => {
+      const existing = local.find(x => x.id === dt.id || x.groupId === dt.groupId);
+      return existing ? { ...existing, days: dt.days, time: dt.time, duration: dt.duration, field: dt.field, title: dt.title } : dt;
+    });
+    local.forEach(l => {
+      if (!merged.some(m => m.id === l.id || m.groupId === l.groupId)) {
+        merged.push(l);
       }
     });
-    return next;
+    return merged;
   });
   const [coachesAttendance, setCoachesAttendance] = useState(() => JSON.parse(localStorage.getItem('ghadir_coachesAttendance') || '[]'));
 
   const [groups, setGroups] = useState(() => {
     const local = JSON.parse(localStorage.getItem('ghadir_groups') || '[]');
     const filteredLocal = local.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-    const next = [...filteredLocal];
-    DEFAULT_SPORTS.forEach(ds => {
-      if (!next.some(x => x.id === ds.id || x.name === ds.name)) {
-        next.push(ds);
+    const merged = DEFAULT_SPORTS.map(ds => {
+      const existing = filteredLocal.find(x => x.id === ds.id);
+      return existing ? { ...existing, name: ds.name, color: ds.color } : ds;
+    });
+    filteredLocal.forEach(l => {
+      if (!merged.some(m => m.id === l.id)) {
+        merged.push(l);
       }
     });
-    return next;
+    return merged;
   });
   const [coaches, setCoaches] = useState(() => JSON.parse(localStorage.getItem('ghadir_coaches') || '[]'));
   const [players, setPlayers] = useState(() => JSON.parse(localStorage.getItem('ghadir_players') || '[]'));
@@ -2210,7 +2216,7 @@ function AdminPortal({ user, onLogout, groups, setGroups, coaches, setCoaches, p
     { id: "messages",     icon: "messages",     label: "الرسائل",      badge: messages.filter(m => m.to === "admin" && !m.read).length || undefined },
   ];
   return (
-    <Shell title="لوحة الإدارة" subtitle="أكاديمية غدير الرياضية - فرع النرجس" color="#2563EB" icon="dashboard" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge="مدير عام" user={user} t={t} syncStatus={syncStatus}>
+    <Shell title="لوحة الإدارة" subtitle="أكاديمية غدير الرياضية - فرع الملقا" color="#2563EB" icon="dashboard" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge="مدير عام" user={user} t={t} syncStatus={syncStatus}>
       {tab === "overview"  && <AdminOverview players={players} coaches={coaches} groups={groups} payments={payments} attendance={attendance} trainings={trainings} t={t} parents={parents} messages={messages} setMessages={setMessages} setTab={setTab} setSelectedPlayerId={setSelectedPlayerId} />}
       {tab === "teams"     && <AdminTeams groups={groups} setGroups={setGroups} coaches={coaches} players={players} t={t} />}
       {tab === "attendance" && <AdminAttendance groups={groups} players={players} coaches={coaches} attendance={attendance} setAttendance={setAttendance} coachesAttendance={coachesAttendance} setCoachesAttendance={setCoachesAttendance} t={t} payments={payments} trainings={trainings} />}
@@ -2240,10 +2246,10 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
     const groupName = groups.find(g => g.id === p.groupId)?.name || "بدون مجموعة";
     
     if (type === "nearing_expiry") {
-      return `السلام عليكم ورحمة الله وبركاته،\n\nنحيطكم علماً بأن اشتراك اللاعب البطل *(${p.name})* شارف على الانتهاء.\n\n*تفاصيل الدورة التدريبية:*\n• المجموعة: *${groupName}*\n• تاريخ بدء الدورة: *${startDate}*\n• تاريخ انتهاء الدورة: *${endDate}*\n\nيرجى سداد اشتراك الدورة الجديدة لضمان استمرارية تدريب ابنكم البطل دون انقطاع. شاكرين ومقدرين حسن تعاونكم معنا.\n\n— إدارة أكاديمية غدير الرياضية - فرع النرجس.`;
+      return `السلام عليكم ورحمة الله وبركاته،\n\nنحيطكم علماً بأن اشتراك اللاعب البطل *(${p.name})* شارف على الانتهاء.\n\n*تفاصيل الدورة التدريبية:*\n• المجموعة: *${groupName}*\n• تاريخ بدء الدورة: *${startDate}*\n• تاريخ انتهاء الدورة: *${endDate}*\n\nيرجى سداد اشتراك الدورة الجديدة لضمان استمرارية تدريب ابنكم البطل دون انقطاع. شاكرين ومقدرين حسن تعاونكم معنا.\n\n— إدارة أكاديمية غدير الرياضية - فرع الملقا.`;
     } else {
       const statusLabel = sub.isUnpaid ? "غير مسدد" : "منتهي";
-      return `السلام عليكم ورحمة الله وبركاته،\n\nنود تذكيركم بلطف بضرورة سداد اشتراك اللاعب البطل *(${p.name})* في أكاديمية غدير الرياضية - فرع النرجس.\n\n*تفاصيل الدورة التدريبية:*\n• المجموعة: *${groupName}*\n• حالة الاشتراك: *${statusLabel}*\n• تاريخ بدء الدورة: *${startDate}*\n• تاريخ انتهاء الدورة: *${endDate}*\n\nيرجى سداد الرسوم المستحقة لتجديد اشتراك اللاعب لضمان استمرارية التدريب. شاكرين ومقدرين حسن تعاونكم معنا.\n\n— إدارة أكاديمية غدير الرياضية - فرع النرجس.`;
+      return `السلام عليكم ورحمة الله وبركاته،\n\nنود تذكيركم بلطف بضرورة سداد اشتراك اللاعب البطل *(${p.name})* في أكاديمية غدير الرياضية - فرع الملقا.\n\n*تفاصيل الدورة التدريبية:*\n• المجموعة: *${groupName}*\n• حالة الاشتراك: *${statusLabel}*\n• تاريخ بدء الدورة: *${startDate}*\n• تاريخ انتهاء الدورة: *${endDate}*\n\nيرجى سداد الرسوم المستحقة لتجديد اشتراك اللاعب لضمان استمرارية التدريب. شاكرين ومقدرين حسن تعاونكم معنا.\n\n— إدارة أكاديمية غدير الرياضية - فرع الملقا.`;
     }
   };
 
@@ -2425,7 +2431,7 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
   // WhatsApp Reminder copy function
   const copyReminder = (playerName) => {
     const monthName = CUR_MONTH.split(" ")[0];
-    const msg = `السلام عليكم ورحمة الله وبركاته، نود تذكيركم بلطف بموعد سداد اشتراك شهر ${monthName} للاعب البطل (${playerName}) في أكاديمية غدير الرياضية - فرع النرجس. شاكرين ومقرارين حسن تعاونكم معنا.\n— إدارة أكاديمية غدير الرياضية - فرع النرجس.`;
+    const msg = `السلام عليكم ورحمة الله وبركاته، نود تذكيركم بلطف بموعد سداد اشتراك شهر ${monthName} للاعب البطل (${playerName}) في أكاديمية غدير الرياضية - فرع الملقا. شاكرين ومقرارين حسن تعاونكم معنا.\n— إدارة أكاديمية غدير الرياضية - فرع الملقا.`;
     navigator.clipboard.writeText(msg).then(() => {
       setToastMsg(`تم نسخ رسالة التذكير للاعب ${playerName} بنجاح!`);
       setTimeout(() => setToastMsg(null), 3000);
@@ -2597,7 +2603,7 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 10% 80%, rgba(37,99,235,.05) 0%, transparent 50%)", pointerEvents: "none" }} />
           
           <div style={{ position: "relative", zIndex: 1, maxWidth: "70%" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: t.name === "dark" ? "#FFF" : "#0F172A", marginBottom: 6 }}>لوحة التحكم الإدارية — أكاديمية غدير الرياضية - فرع النرجس</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: t.name === "dark" ? "#FFF" : "#0F172A", marginBottom: 6 }}>لوحة التحكم الإدارية — أكاديمية غدير الرياضية - فرع الملقا</h2>
             <p style={{ fontSize: 12, color: t.textMid, lineHeight: 1.6, margin: 0 }}>مرحباً بك مجدداً. يمكنك متابعة كافة البيانات والعمليات المالية والرياضية للأكاديمية والاطلاع على المخططات التحليلية المحدثة مباشرة.</p>
           </div>
 
@@ -4148,9 +4154,9 @@ function InvoiceModal({ payment, allPayments, players, parents, onClose, groups 
 
     const shareScript = mode === 'share' ? `
       async function doShare() {
-        const title = 'فاتورة مشترك — أكاديمية غدير الرياضية - فرع النرجس';
+        const title = 'فاتورة مشترك — أكاديمية غدير الرياضية - فرع الملقا';
         const text = [
-          'فاتورة مشترك — أكاديمية غدير الرياضية - فرع النرجس',
+          'فاتورة مشترك — أكاديمية غدير الرياضية - فرع الملقا',
           'اللاعب: ${payment.playerName}',
           'الشهر: ${payment.month}',
           'المجموع: ${fmtMoney(totalAmount)}',
@@ -4288,8 +4294,8 @@ function InvoiceModal({ payment, allPayments, players, parents, onClose, groups 
             </div>
             {/* Academy name + single logo */}
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <img src={logoMain} alt="أكاديمية غدير - فرع النرجس" style={{ width: 70, height: 70, objectFit: 'contain' }}/>
-              <div style={{ fontSize: 22, fontWeight: 900, color: '#1a1a2e', letterSpacing: '-0.3px', lineHeight: 1.2 }}>أكاديمية غدير الرياضية - فرع النرجس</div>
+              <img src={logoMain} alt="أكاديمية غدير - فرع الملقا" style={{ width: 70, height: 70, objectFit: 'contain' }}/>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#1a1a2e', letterSpacing: '-0.3px', lineHeight: 1.2 }}>أكاديمية غدير الرياضية - فرع الملقا</div>
               <div style={{ fontSize: 12, color: '#777' }}>أكاديمية رياضية</div>
             </div>
             {/* Empty spacer to keep layout balanced */}
@@ -4445,7 +4451,7 @@ function InvoiceModal({ payment, allPayments, players, parents, onClose, groups 
               <span style={{ fontSize: 9.5, color: '#888', fontWeight: 600 }}>حقوق الرعاية: مؤسسة غدير الرياضية</span>
               <img src={logoInstitutionColor} alt="مؤسسة غدير الرياضية" style={{ height: 52, objectFit: 'contain' }}/>
             </div>
-            <div style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>أكاديمية غدير الرياضية - فرع النرجس · أكاديمية رياضية</div>
+            <div style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>أكاديمية غدير الرياضية - فرع الملقا · أكاديمية رياضية</div>
           </div>
         </div>
       </div>
@@ -5397,7 +5403,7 @@ function AdminReports({ players, coaches, groups, payments, attendance, evals, t
         wsRevenue["!cols"] = [{ wch: 20 }, { wch: 14 }, { wch: 18 }];
         XLSX.utils.book_append_sheet(wb, wsRevenue, "الإيرادات حسب النوع");
 
-        const fileName = `تقرير_أكاديمية_غدير_فرع_النرجس_${periodLabel.replace(/ /g, "_")}.xlsx`;
+        const fileName = `تقرير_أكاديمية_غدير_فرع_الملقا_${periodLabel.replace(/ /g, "_")}.xlsx`;
         XLSX.writeFile(wb, fileName);
         setLastExport({ time: new Date().toLocaleTimeString("ar-SA"), period: periodLabel, fileName });
       } catch (e) {
@@ -5738,7 +5744,7 @@ function CoachPortal({ user, onLogout, groups, coaches, players, parents, paymen
   }, [perms]);
 
   return (
-    <Shell title={coach.name} subtitle={`أكاديمية غدير الرياضية - فرع النرجس · مدرب ${group?.name || ""}`} color="#06B6D4" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge={group?.name} user={user} t={t} syncStatus={syncStatus}>
+    <Shell title={coach.name} subtitle={`أكاديمية غدير الرياضية - فرع الملقا · مدرب ${group?.name || ""}`} color="#06B6D4" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge={group?.name} user={user} t={t} syncStatus={syncStatus}>
       {tab === "home"       && <CoachHome coach={coach} group={group} groups={groups} myPlayers={myPlayers} attendance={attendance} evals={evals} trainings={trainings} t={t}/>}
       {tab === "sessions"   && <CoachSessions coach={coach} group={group} groups={groups} trainings={trainings} t={t}/>}
       {tab === "players"    && <CoachPlayers myPlayers={myPlayers} group={group} evals={evals} t={t} trainings={trainings} attendance={attendance} payments={payments}/>}
@@ -6631,7 +6637,7 @@ function ParentPortal({ user, onLogout, players, groups, coaches, parents, payme
   ];
 
   return (
-    <Shell title={`أهلاً، ${parent.name}`} subtitle="أكاديمية غدير الرياضية - فرع النرجس" color="#10B981" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge="ولي أمر" user={user} t={t} syncStatus={syncStatus}>
+    <Shell title={`أهلاً، ${parent.name}`} subtitle="أكاديمية غدير الرياضية - فرع الملقا" color="#10B981" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge="ولي أمر" user={user} t={t} syncStatus={syncStatus}>
       {myPlayers.length > 1 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 18, borderBottom: `1px solid ${t.border}`, paddingBottom: 14 }}>
           {myPlayers.map(p => (
@@ -7360,7 +7366,7 @@ function ParentSchedule({ childGroup, childCoach, trainings, t }) {
    MESSAGING (shared)
 ══════════════════════════════════════════════════════════ */
 const QUICK_TEMPLATES = [
-  { label: "ترحيب", text: "أهلاً بك في أكاديمية غدير الرياضية - فرع النرجس. يسعدنا انضمامكم إلينا." },
+  { label: "ترحيب", text: "أهلاً بك في أكاديمية غدير الرياضية - فرع الملقا. يسعدنا انضمامكم إلينا." },
   { label: "تذكير سداد", text: "نحيطكم علماً بضرورة سداد الرسوم الشهرية لضمان استمرارية التدريب." },
   { label: "تأجيل تدريب", text: "نعتذر عن إلغاء تدريب اليوم لظروف طارئة، وسيتم التعويض في وقت لاحق." },
   { label: "تقييم جديد", text: "تم تحديث التقييم الفني للاعب، يرجى الاطلاع عليه من لوحة التحكم." },
@@ -7380,7 +7386,7 @@ function Messaging({ messages, setMessages, meId, meName, coaches, parents, t, r
   const templates = (() => {
     if (role === "admin") {
       return [
-        { label: "ترحيب باللاعبين", text: "أهلاً بك في أكاديمية غدير الرياضية - فرع النرجس. يسعدنا انضمامكم إلينا متمنين لكم رحلة تدريبية متميزة." },
+        { label: "ترحيب باللاعبين", text: "أهلاً بك في أكاديمية غدير الرياضية - فرع الملقا. يسعدنا انضمامكم إلينا متمنين لكم رحلة تدريبية متميزة." },
         { label: "تذكير سداد الرسوم", text: "نحيطكم علماً بضرورة سداد الرسوم الشهرية المستحقة لضمان استمرارية التدريب." },
         { label: "إشعار إداري", text: "نود تذكيركم بضرورة الالتزام بالقواعد والزي الرسمي للأكاديمية خلال الحصص التدريبية." },
         { label: "عطلة رسمية", text: "نحيطكم علماً بأنه سيتم إيقاف التدريبات مؤقتاً خلال فترة الإجازة الرسمية المعلنة." }
@@ -7877,7 +7883,7 @@ function AdminEvents({ players = [], groups = [], parents = [], payments = [], t
 
   const templates = [
     { label: "تذكير بالاشتراك", text: "نود تذكيركم بلطف بأن اشتراك اللاعب قد شارف على الانتهاء، يرجى سداد رسوم الدورة الجديدة لتجديد الاشتراك واستمرار التدريب. شاكرين حسن تعاونكم." },
-    { label: "ترحيب باللاعب", text: "نرحب باللاعب في أكاديمية غدير الرياضية - فرع النرجس ونسعد بانضمامه إلينا متمنين له رحلة تدريبية مميزة ومليئة بالنجاح والتألق." },
+    { label: "ترحيب باللاعب", text: "نرحب باللاعب في أكاديمية غدير الرياضية - فرع الملقا ونسعد بانضمامه إلينا متمنين له رحلة تدريبية مميزة ومليئة بالنجاح والتألق." },
     { label: "تذكير بالموعد", text: "يرجى التكرم بحضور اللاعب للتمرين في الوقت المحدد تماماً مع إحضار الزي الرسمي للأكاديمية والالتزام بالتعليمات." },
     { label: "تجميد مؤقت", text: "نود إفادتكم بأنه تم تجميد اشتراك اللاعب بناءً على طلبكم مؤقتاً، وسنوافيكم بموعد استئناف النشاط الرياضي لاحقاً." },
   ];

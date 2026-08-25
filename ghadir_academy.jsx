@@ -1666,6 +1666,7 @@ export default function App() {
       return null;
     }
   });
+  const [isAppLoading, setIsAppLoading] = useState(!!user);
   const [attendance, setAttendance] = useState([]);
   const [evals, setEvals] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -1874,6 +1875,18 @@ export default function App() {
     });
   }, []);
 
+  // Prevent closing window if data is still syncing
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (syncStatus === "syncing" || pendingSyncsRef.current > 0) {
+        e.preventDefault();
+        e.returnValue = 'جاري حفظ البيانات في قاعدة البيانات، يرجى الانتظار لحين الانتهاء لتجنب فقدان البيانات.';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [syncStatus]);
+
   const isFirstFetchRef = useRef(true);
 
   // Fetch from API (with automatic background polling)
@@ -1973,6 +1986,10 @@ export default function App() {
         }
       } catch (e) {
         console.error("API Fetch Error:", e);
+      } finally {
+        if (isInitial) {
+          setIsAppLoading(false);
+        }
       }
     };
 
@@ -2295,7 +2312,9 @@ export default function App() {
 
       {!user
         ? <LoginPage onLogin={(u, tok) => { setUser(u); if (tok) setToken(tok); }} players={players} coaches={coaches} t={t} />
-        : (String(user.role).toLowerCase() === "admin" || String(user.role).toLowerCase() === "super_admin")
+        : isAppLoading 
+          ? <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", gap: 16, alignItems: "center", justifyContent: "center", background: t.bg, color: t.text }}><AnimIcon type="notify" size={32} color={t.purple} /><div style={{ fontWeight: 800 }}>جاري جلب البيانات...</div></div>
+          : (String(user.role).toLowerCase() === "admin" || String(user.role).toLowerCase() === "super_admin")
           ? <AdminPortal  user={user} onLogout={() => { setUser(null); setToken(""); localStorage.removeItem('ghadir_logged_user'); localStorage.removeItem('ghadir_token'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
           : (String(user.role).toLowerCase() === "coach")
             ? <CoachPortal  user={user} onLogout={() => { setUser(null); setToken(""); localStorage.removeItem('ghadir_logged_user'); localStorage.removeItem('ghadir_token'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />

@@ -10,7 +10,7 @@ import logoInstitutionWhite from "./logo_institution_white.png";
 const API_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || (
   typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
     ? "http://localhost:3001"
-    : "https://ghadir-academy-production.up.railway.app"
+    : ""
 );
 
 function PasswordReveal({ userId, t }) {

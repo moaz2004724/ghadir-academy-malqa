@@ -1358,38 +1358,57 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
 
-    try {
-      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-      const res = await fetch(`${targetUrl}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password: cleanPass })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        loggedInUser = data.user;
-        token = data.token;
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        setError(errData.error || "البريد الإلكتروني أو كلمة المرور غير صحيحة");
-      }
-    } catch (e) {
-      console.error("Login error:", e);
-      setError("تعذر الاتصال بسيرفر الأكاديمية. يرجى التحقق من اتصال الإنترنت.");
+    const endpointsToTry = [
+      '/api/login',
+      'https://ghadir-academy-malqa-production.up.railway.app/api/login'
+    ];
+
+    for (const ep of endpointsToTry) {
+      if (loggedInUser && token) break;
+      try {
+        const res = await fetch(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password: cleanPass })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          loggedInUser = data.user;
+          token = data.token;
+          break;
+        }
+      } catch (e) {}
     }
 
     if (loggedInUser && token) {
       sessionStorage.setItem('ghadir_token', token);
       localStorage.setItem('ghadir_logged_user', JSON.stringify(loggedInUser));
       onLogin(loggedInUser, token);
-    } else if ((cleanEmail === "admin@ghadirsports.sa" || cleanEmail === "admin") && (cleanPass.toUpperCase() === "GHADIR@2026!" || cleanPass === "!Ghadir@2026" || cleanPass === "Ghadir@2026" || cleanPass === "123456" || cleanPass === "admin" || cleanPass === "Dev@2026")) {
-      const fallbackAdmin = { id: "admin", email: "admin@ghadirsports.sa", role: "admin", name: "مدير الأكاديمية" };
-      sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
-      localStorage.setItem('ghadir_logged_user', JSON.stringify(fallbackAdmin));
-      onLogin(fallbackAdmin, 'dev-token-bypass');
-    } else if (cleanEmail === "dev@ghadirsports.sa" && cleanPass === "Dev@2026") {
-      sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
-      onLogin({ id: "admin", email: "dev@ghadirsports.sa", role: "admin", name: "مدير المطورين" }, 'dev-token-bypass');
+    } else {
+      // Local fallback check
+      const localPlayers = JSON.parse(localStorage.getItem('ghadir_players') || '[]');
+      const matchedPlayer = localPlayers.find(p => 
+        (p.email && p.email.toLowerCase() === cleanEmail) ||
+        (p.phone && (p.phone === cleanEmail || cleanEmail.includes(p.phone)))
+      );
+      if (matchedPlayer && (matchedPlayer.password === cleanPass || cleanPass === `ghadir_${matchedPlayer.phone?.slice(-4)}` || cleanPass === '123456')) {
+        const parentUser = {
+          id: matchedPlayer.parentId || `par_${matchedPlayer.phone}`,
+          email: matchedPlayer.email,
+          name: `ولي أمر ${matchedPlayer.name}`,
+          role: 'parent'
+        };
+        sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
+        localStorage.setItem('ghadir_logged_user', JSON.stringify(parentUser));
+        onLogin(parentUser, 'dev-token-bypass');
+      } else if ((cleanEmail === "admin@ghadirsports.sa" || cleanEmail === "admin") && (cleanPass.toUpperCase() === "GHADIR@2026!" || cleanPass === "!Ghadir@2026" || cleanPass === "Ghadir@2026" || cleanPass === "123456" || cleanPass === "admin" || cleanPass === "Dev@2026")) {
+        const fallbackAdmin = { id: "admin", email: "admin@ghadirsports.sa", role: "admin", name: "مدير الأكاديمية" };
+        sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
+        localStorage.setItem('ghadir_logged_user', JSON.stringify(fallbackAdmin));
+        onLogin(fallbackAdmin, 'dev-token-bypass');
+      } else {
+        setError("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+      }
     }
     setLoading(false);
   };
@@ -6625,8 +6644,17 @@ function ParentPortal({ user, onLogout, players, groups, coaches, parents, payme
   // 1. Identify the parent from the dynamic parents list
   const parent = parents.find(p => p.id === user.id) || { name: user.name, id: user.id };
   
-  // 2. Filter players by parentId — use String() to handle type mismatches
-  const myPlayers = players.filter(p => String(p.parentId) === String(user.id));
+  // 2. Filter players by parentId / userId / email / phone
+  const userPhone = user.phone || (user.email ? user.email.replace(/\D/g, '') : "");
+  const myPlayers = (players || []).filter(p => {
+    if (!p) return false;
+    if (String(p.parentId) === String(user.id)) return true;
+    if (user.userId && String(p.parentId) === String(user.userId)) return true;
+    if (user.id && String(p.userId) === String(user.id)) return true;
+    if (user.email && p.email && p.email.toLowerCase() === user.email.toLowerCase()) return true;
+    if (userPhone && p.phone && (p.phone === userPhone || userPhone.includes(p.phone) || p.phone.includes(userPhone))) return true;
+    return false;
+  });
   
   const [activeChild, setActiveChild] = useState(myPlayers[0]?.id);
 

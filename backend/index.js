@@ -752,6 +752,8 @@ app.delete('/api/players/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_A
       return res.status(404).json({ error: 'اللاعب غير موجود' });
     }
 
+    await prisma.payment.deleteMany({ where: { playerId: id } });
+    await prisma.evaluation.deleteMany({ where: { playerId: id } });
     await prisma.player.delete({ where: { id } });
     res.json({ success: true, id });
   } catch (e) {

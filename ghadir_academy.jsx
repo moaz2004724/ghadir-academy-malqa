@@ -1781,19 +1781,33 @@ export default function App() {
           if (res.ok || (isDeleted && res.status === 404)) {
             success = true;
             break;
+          } else if (res.status === 401) {
+            console.warn(`Sync 401 unauthorized for ${table}`);
+            setUser(null);
+            setToken("");
+            localStorage.removeItem('ghadir_logged_user');
+            localStorage.removeItem('ghadir_token');
+            sessionStorage.removeItem('ghadir_token');
+            break;
+          } else {
+            const errText = await res.text();
+            console.error(`Sync API error (${res.status}) on ${u}:`, errText);
           }
         } catch (err) {
-          // try next
+          console.warn(`Network fail on ${u}:`, err.message);
         }
       }
       markLocalWrite();
+      if (!success) {
+        setSyncStatus("error");
+      }
     } catch (e) {
       console.warn(`Sync warning for ${table}:`, e.message);
+      setSyncStatus("error");
     } finally {
       pendingSyncsRef.current--;
       if (pendingSyncsRef.current <= 0) {
         pendingSyncsRef.current = 0;
-        setSyncStatus("synced");
       }
     }
   };

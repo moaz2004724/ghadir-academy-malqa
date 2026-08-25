@@ -623,6 +623,9 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
       }
     }
 
+    const safeFreezeRanges = (p.freezeRanges && typeof p.freezeRanges === 'object') ? JSON.stringify(p.freezeRanges) : (p.freezeRanges || null);
+    const safeTrainingDays = (p.trainingDays && typeof p.trainingDays === 'object') ? JSON.stringify(p.trainingDays) : (p.trainingDays || null);
+
     let player;
     const existing = p.id ? await prisma.player.findUnique({ where: { id: p.id } }) : null;
 
@@ -638,8 +641,8 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
           joinDate: parseSafeDate(p.joinDate),
           bus: p.bus,
           nationalId: p.nationalId ? p.nationalId.trim() : null,
-          freezeRanges: p.freezeRanges,
-          trainingDays: p.trainingDays,
+          freezeRanges: safeFreezeRanges,
+          trainingDays: safeTrainingDays,
           group: validGroupId ? { connect: { id: validGroupId } } : undefined,
           parent: { connect: { id: resolvedParentId } }
         }
@@ -647,7 +650,7 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
     } else {
       player = await prisma.player.create({
         data: {
-          id: p.id,
+          ...(p.id ? { id: p.id } : {}),
           name: p.name, phone: p.phone, age: resolvedAge,
           status: p.status || 'نشط', position: p.position,
           weight: resolvedWeight,
@@ -656,8 +659,8 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
           joinDate: parseSafeDate(p.joinDate),
           bus: p.bus,
           nationalId: p.nationalId ? p.nationalId.trim() : null,
-          freezeRanges: p.freezeRanges,
-          trainingDays: p.trainingDays,
+          freezeRanges: safeFreezeRanges,
+          trainingDays: safeTrainingDays,
           group: validGroupId ? { connect: { id: validGroupId } } : undefined,
           parent: { connect: { id: resolvedParentId } }
         }
@@ -676,38 +679,59 @@ app.post('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN'
     const { id, playerId, playerName, coachId, coachName, type, month, amount, date, note, discount, packageName, sessionsCount } = req.body;
     const resolvedDiscount = (discount !== undefined && discount !== null && !isNaN(discount)) ? parseFloat(discount) : 0;
     const resolvedSessions = (sessionsCount !== undefined && sessionsCount !== null && !isNaN(sessionsCount)) ? parseInt(sessionsCount) : 12;
-    const payment = await prisma.payment.upsert({
-      where: { id: id || 'new' },
-      update: { 
-        playerId, 
-        playerName, 
-        coachId, 
-        coachName, 
-        type, 
-        month, 
-        amount: parseFloat(amount || 0),
-        discount: resolvedDiscount,
-        date: parseSafeDate(date), 
-        note,
-        packageName,
-        sessionsCount: resolvedSessions
-      },
-      create: { 
-        id, 
-        playerId, 
-        playerName, 
-        coachId, 
-        coachName, 
-        type, 
-        month, 
-        amount: parseFloat(amount || 0),
-        discount: resolvedDiscount,
-        date: parseSafeDate(date), 
-        note,
-        packageName,
-        sessionsCount: resolvedSessions
+
+    let validPlayerId = playerId;
+    if (playerId) {
+      const pExists = await prisma.player.findUnique({ where: { id: playerId } });
+      if (!pExists) {
+        const firstP = await prisma.player.findFirst();
+        if (firstP) validPlayerId = firstP.id;
       }
-    });
+    }
+
+    if (!validPlayerId) {
+      return res.status(400).json({ error: 'اللاعب غير موجود في النظام' });
+    }
+
+    const existingPayment = id ? await prisma.payment.findUnique({ where: { id } }) : null;
+    let payment;
+    if (existingPayment) {
+      payment = await prisma.payment.update({
+        where: { id },
+        data: { 
+          playerId: validPlayerId, 
+          playerName, 
+          coachId, 
+          coachName, 
+          type: type || 'اشتراك', 
+          month: month || 'الشهر الحالي', 
+          amount: parseFloat(amount || 0),
+          discount: resolvedDiscount,
+          date: parseSafeDate(date), 
+          note,
+          packageName,
+          sessionsCount: resolvedSessions
+        }
+      });
+    } else {
+      payment = await prisma.payment.create({
+        data: { 
+          ...(id ? { id } : {}), 
+          playerId: validPlayerId, 
+          playerName, 
+          coachId, 
+          coachName, 
+          type: type || 'اشتراك', 
+          month: month || 'الشهر الحالي', 
+          amount: parseFloat(amount || 0),
+          discount: resolvedDiscount,
+          date: parseSafeDate(date), 
+          note,
+          packageName,
+          sessionsCount: resolvedSessions
+        }
+      });
+    }
     res.json(payment);
   } catch (e) {
     console.error("Payment error:", e);
@@ -732,17 +756,24 @@ app.post('/api/attendance', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMI
       if (coachExists) validCoachId = a.coachId;
     }
 
-    const att = await prisma.attendance.upsert({
-      where: { id: a.id },
-      update: { records: a.records, date: parseSafeDate(a.date) },
-      create: { 
-        id: a.id, 
-        date: parseSafeDate(a.date), 
-        records: a.records,
-        group: validGroupId ? { connect: { id: validGroupId } } : undefined,
-        coach: validCoachId ? { connect: { id: validCoachId } } : undefined
-      }
-    });
+    const existingAtt = a.id ? await prisma.attendance.findUnique({ where: { id: a.id } }) : null;
+    let att;
+    if (existingAtt) {
+      att = await prisma.attendance.update({
+        where: { id: a.id },
+        data: { records: a.records || {}, date: parseSafeDate(a.date) }
+      });
+    } else {
+      att = await prisma.attendance.create({
+        data: { 
+          ...(a.id ? { id: a.id } : {}), 
+          date: parseSafeDate(a.date), 
+          records: a.records || {},
+          group: validGroupId ? { connect: { id: validGroupId } } : undefined,
+          coach: validCoachId ? { connect: { id: validCoachId } } : undefined
+        }
+      });
+    }
     res.json(att);
   } catch (e) {
     console.error("Attendance error:", e);

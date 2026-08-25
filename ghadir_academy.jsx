@@ -1839,6 +1839,7 @@ export default function App() {
 
         const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
         let res = null;
+        console.log("[API ORDER] REQUEST START: GET /api/initial-data");
         try {
           res = await fetch(`${targetUrl}/api/initial-data`, {
             headers: { 'Authorization': `Bearer ${savedToken}` }
@@ -1855,11 +1856,8 @@ export default function App() {
 
         if (res && res.ok) {
           const data = await res.json();
-          console.log("[REAL DEBUG AFTER REFRESH]", {
-            playerFound: data.players?.some(p => p.name === "REAL_CHROME_TEST_2026"),
-            playersCount: data.players?.length,
-            player: data.players?.find(p => p.name === "REAL_CHROME_TEST_2026")
-          });
+          console.log("[PLAYERS DEBUG 1]", { status: res.status, playersCount: data.players?.length, sample: data.players?.slice(0, 3) });
+          console.log("[API ORDER] REQUEST END: GET /api/initial-data", { returnedPlayers: data.players?.length });
           
           // On background polls, skip setting state if a write happened during the fetch
           if (!isFirstFetchRef.current && pendingSyncsRef.current > 0) {
@@ -1893,7 +1891,7 @@ export default function App() {
                 password: migrated.password || `ghadir_${phone.slice(-4)}`
               };
             });
-            console.trace("[REAL BROWSER setPlayers]", { count: repaired.length });
+            console.log("[PLAYERS DEBUG 2] setPlayers count:", repaired.length);
             setPlayers(repaired);
           }
           if (data.coaches) setCoaches(data.coaches.map(migrateItem));
@@ -3504,11 +3502,6 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
   const [freezeModal, setFreezeModal] = useState(null);
   const [search, setSearch] = useState("");
   const [fg, setFg] = useState("الكل");
-  console.log("[REAL ADMIN PLAYERS]", {
-    totalPlayers: players?.length,
-    targetPlayer: players?.find(p => p.name === "REAL_CHROME_TEST_2026"),
-    filter: fg
-  });
   const emptyP = { name: "", age: "", groupId: groups[0]?.id || "", phone: "", position: "مهاجم", status: "نشط", score: 80, speed: 75, stamina: 75, technique: 75, teamwork: 75, goals: 0, assists: 0, attendancePct: 90, weight: "", height: "", parentId: "__new__", email: "", password: "", bus: "" };
   const [form, setForm] = useState(emptyP);
   const filtered = (players || []).filter(p => {
@@ -3520,11 +3513,9 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     const matchesGroup = fg === "الكل" || p.groupId === fg;
     return matchesSearch && matchesGroup;
   });
-  console.log("[REAL FILTERED]", {
-    filteredCount: filtered?.length,
-    targetPlayer: filtered?.find(p => p.name === "REAL_CHROME_TEST_2026"),
-    filter: fg
-  });
+
+  console.log("[PLAYERS DEBUG 3]", { fg, playersCount: players?.length, filteredCount: filtered?.length, filteredSample: filtered?.slice(0, 3) });
+  console.log("[PLAYERS DEBUG 4]", { renderingPlayers: true, visibleCount: filtered?.length });
 
   useEffect(() => {
     if (selectedPlayerId) {

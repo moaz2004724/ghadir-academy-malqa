@@ -3004,11 +3004,38 @@ function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t }) {
   const [selGroup, setSelGroup] = useState(null);
   const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
-  const save = () => {
-    if (!form.name.trim()) return;
-    const cleanForm = { ...form, price: form.price !== undefined ? parseFloat(form.price) : 350 };
-    if (modal === "add") setGroups(g => [...g, { ...cleanForm, id: `g${Date.now()}` }]);
-    else setGroups(g => g.map(x => x.id === form.id ? cleanForm : x));
+  const save = async () => {
+    if (!form.name || !form.name.trim()) return;
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+    const payload = {
+      ...(form.id ? { id: form.id } : {}),
+      name: form.name,
+      color: form.color || "#06B6D4",
+      coachId: form.coachId || null,
+      price8: form.price8 !== undefined ? parseFloat(form.price8) : 250,
+      price12: form.price12 !== undefined ? parseFloat(form.price12) : 350,
+      price16: form.price16 !== undefined ? parseFloat(form.price16) : 450
+    };
+
+    const fetchUrls = ['/api/groups', `${targetUrl}/api/groups`];
+    for (const u of fetchUrls) {
+      try {
+        const res = await fetch(u, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+          },
+          body: JSON.stringify(payload)
+        });
+        if (res && res.ok) break;
+      } catch (e) {}
+    }
+
+    if (typeof loadInitialData === 'function') {
+      await loadInitialData();
+    }
     setModal(null);
   };
 

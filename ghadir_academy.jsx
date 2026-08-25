@@ -1388,30 +1388,8 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
       localStorage.setItem('ghadir_logged_user', JSON.stringify(loggedInUser));
       onLogin(loggedInUser, token);
     } else {
-      // Local fallback check
-      const localPlayers = JSON.parse(localStorage.getItem('ghadir_players') || '[]');
-      const matchedPlayer = localPlayers.find(p => 
-        (p.email && p.email.toLowerCase() === cleanEmail) ||
-        (p.phone && (p.phone === cleanEmail || cleanEmail.includes(p.phone)))
-      );
-      if (matchedPlayer && (matchedPlayer.password === cleanPass || cleanPass === `ghadir_${matchedPlayer.phone?.slice(-4)}` || cleanPass === '123456')) {
-        const parentUser = {
-          id: matchedPlayer.parentId || `par_${matchedPlayer.phone}`,
-          email: matchedPlayer.email,
-          name: `ولي أمر ${matchedPlayer.name}`,
-          role: 'parent'
-        };
-        sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
-        localStorage.setItem('ghadir_logged_user', JSON.stringify(parentUser));
-        onLogin(parentUser, 'dev-token-bypass');
-      } else if ((cleanEmail === "admin@ghadirsports.sa" || cleanEmail === "admin") && (cleanPass.toUpperCase() === "GHADIR@2026!" || cleanPass === "!Ghadir@2026" || cleanPass === "Ghadir@2026" || cleanPass === "123456" || cleanPass === "admin" || cleanPass === "Dev@2026")) {
-        const fallbackAdmin = { id: "admin", email: "admin@ghadirsports.sa", role: "admin", name: "مدير الأكاديمية" };
-        sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
-        localStorage.setItem('ghadir_logged_user', JSON.stringify(fallbackAdmin));
-        onLogin(fallbackAdmin, 'dev-token-bypass');
-      } else {
-        setError("البريد الإلكتروني أو كلمة المرور غير صحيحة");
-      }
+      // No local fallback - server is the single source of truth
+      setError("البريد الإلكتروني أو كلمة المرور غير صحيحة. تأكد من اتصالك بالإنترنت.");
     }
     setLoading(false);
   };
@@ -1670,7 +1648,7 @@ export default function App() {
   const [attendance, setAttendance] = useState([]);
   const [evals, setEvals] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [prices, setPrices] = useState(() => JSON.parse(localStorage.getItem('ghadir_prices') || JSON.stringify(PRICE_LIST)));
+  const [prices, setPrices] = useState(PRICE_LIST);
   const DEFAULT_SPORTS = [
     { id: "g-football-juniors", name: "كرة القدم - الصغار (5-10 سنوات)", color: "#16A34A", price8: 250, price12: 350, price16: 450 },
     { id: "g-football-seniors", name: "كرة القدم - الكبار (11-16 سنة)", color: "#15803D", price8: 250, price12: 350, price16: 450 },
@@ -1693,35 +1671,10 @@ export default function App() {
     { id: "t-boxing", groupId: "g-boxing", coachId: "c-royal-coach", days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 60, field: "صالة البوكسينج", isRecurring: true, type: "training", title: "تمرين البوكسينج (5:00 - 6:00)" }
   ];
 
-  const [trainings, setTrainings] = useState(() => {
-    const local = JSON.parse(localStorage.getItem('ghadir_trainings') || '[]');
-    const merged = DEFAULT_TRAININGS.map(dt => {
-      const existing = local.find(x => x.id === dt.id || x.groupId === dt.groupId);
-      return existing ? { ...existing, days: dt.days, time: dt.time, duration: dt.duration, field: dt.field, title: dt.title } : dt;
-    });
-    local.forEach(l => {
-      if (!merged.some(m => m.id === l.id || m.groupId === l.groupId)) {
-        merged.push(l);
-      }
-    });
-    return merged;
-  });
+  const [trainings, setTrainings] = useState(DEFAULT_TRAININGS);
   const [coachesAttendance, setCoachesAttendance] = useState([]);
 
-  const [groups, setGroups] = useState(() => {
-    const local = JSON.parse(localStorage.getItem('ghadir_groups') || '[]');
-    const filteredLocal = local.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-    const merged = DEFAULT_SPORTS.map(ds => {
-      const existing = filteredLocal.find(x => x.id === ds.id);
-      return existing ? { ...existing, name: ds.name, color: ds.color } : ds;
-    });
-    filteredLocal.forEach(l => {
-      if (!merged.some(m => m.id === l.id)) {
-        merged.push(l);
-      }
-    });
-    return merged;
-  });
+  const [groups, setGroups] = useState(DEFAULT_SPORTS);
   const [coaches, setCoaches] = useState([]);
   const [players, setPlayers] = useState([]);
   const [parents, setParents] = useState([]);
@@ -1729,7 +1682,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('ghadir_theme') || "dark");
 
   const [syncStatus, setSyncStatus] = useState("synced"); // 'synced', 'syncing', 'error'
-  const [lastUpdate, setLastUpdateState] = useState(() => parseInt(localStorage.getItem('ghadir_last_update') || '0'));
+  const [lastUpdate, setLastUpdateState] = useState(0);
   const lastLocalWriteRef = useRef(0);
   const pendingSyncsRef = useRef(0);
   const markLocalWrite = () => {
@@ -1739,7 +1692,6 @@ export default function App() {
   const setLastUpdate = (val) => {
     const time = val !== undefined ? val : Date.now();
     setLastUpdateState(time);
-    localStorage.setItem('ghadir_last_update', String(time));
   };
 
   const syncWithAPI = async (table, item, isDeleted = false) => {
@@ -1768,18 +1720,21 @@ export default function App() {
       let body = isDeleted ? undefined : JSON.stringify(item);
       let method = isDeleted ? 'DELETE' : 'POST';
 
-      const urlsToTry = [
-        isDeleted ? `${targetUrl}/api/${path}/${item.id}` : `${targetUrl}/api/${path}`,
-        isDeleted ? `/api/${path}/${item.id}` : `/api/${path}`
-      ];
+      const url = isDeleted ? `${targetUrl}/api/${path}/${item.id}` : `${targetUrl}/api/${path}`;
 
       let success = false;
-      for (const u of urlsToTry) {
+      let serverData = null;
+      const maxRetries = 2;
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
         if (success) break;
         try {
-          const res = await fetch(u, { method, headers, body });
+          const res = await fetch(url, { method, headers, body });
           if (res.ok || (isDeleted && res.status === 404)) {
             success = true;
+            if (res.ok && !isDeleted) {
+              try { serverData = await res.json(); } catch(e) {}
+            }
             break;
           } else if (res.status === 401) {
             console.warn(`Sync 401 unauthorized for ${table}`);
@@ -1791,19 +1746,27 @@ export default function App() {
             break;
           } else {
             const errText = await res.text();
-            console.error(`Sync API error (${res.status}) on ${u}:`, errText);
+            console.error(`Sync API error (${res.status}) attempt ${attempt + 1}:`, errText);
+            if (attempt < maxRetries - 1) {
+              await new Promise(r => setTimeout(r, 1000)); // wait 1s before retry
+            }
           }
         } catch (err) {
-          console.warn(`Network fail on ${u}:`, err.message);
+          console.warn(`Network fail attempt ${attempt + 1} on ${url}:`, err.message);
+          if (attempt < maxRetries - 1) {
+            await new Promise(r => setTimeout(r, 1000));
+          }
         }
       }
       markLocalWrite();
       if (!success) {
         setSyncStatus("error");
       }
+      return serverData; // Return server response for caller to use
     } catch (e) {
       console.warn(`Sync warning for ${table}:`, e.message);
       setSyncStatus("error");
+      return null;
     } finally {
       pendingSyncsRef.current--;
       if (pendingSyncsRef.current <= 0) {
@@ -2033,19 +1996,10 @@ export default function App() {
   }, [user, token]);
 
   useEffect(() => {
-    localStorage.setItem('ghadir_players', JSON.stringify(players));
-    localStorage.setItem('ghadir_coaches', JSON.stringify(coaches));
-    localStorage.setItem('ghadir_groups', JSON.stringify(groups));
-    localStorage.setItem('ghadir_parents', JSON.stringify(parents));
-    localStorage.setItem('ghadir_payments', JSON.stringify(payments));
-    localStorage.setItem('ghadir_attendance', JSON.stringify(attendance));
-    localStorage.setItem('ghadir_coachesAttendance', JSON.stringify(coachesAttendance));
-    localStorage.setItem('ghadir_evals', JSON.stringify(evals));
-    localStorage.setItem('ghadir_messages', JSON.stringify(messages));
-    localStorage.setItem('ghadir_prices', JSON.stringify(prices));
-    localStorage.setItem('ghadir_trainings', JSON.stringify(trainings));
+    // Only save theme preference to localStorage - NOT business data
+    // All business data (players, coaches, groups, etc.) comes from the server API exclusively
     localStorage.setItem('ghadir_theme', theme);
-  }, [players, coaches, groups, parents, payments, attendance, coachesAttendance, evals, messages, prices, trainings, theme]);
+  }, [theme]);
 
   const t = THEMES[theme];
 
@@ -2265,7 +2219,6 @@ export default function App() {
     t,
     forceRefresh: () => {
       setLastUpdate(0); // Clear lock
-      localStorage.setItem('ghadir_last_update', '0');
       window.location.reload(); 
     }
   };
@@ -6743,19 +6696,34 @@ function CoachPayments({ coachId, myPlayers, payments, setPayments, prices, coac
 ══════════════════════════════════════════════════════════ */
 function ParentPortal({ user, onLogout, players, groups, coaches, parents, payments, attendance, evals, messages, setMessages, prices, trainings, t, syncStatus }) {
   // 1. Identify the parent from the dynamic parents list
-  const parent = parents.find(p => p.id === user.id) || { name: user.name, id: user.id };
+  // user.parentId = Parent table ID (from login response)
+  // user.id = User table ID (always)
+  // user.userId = User table ID (explicit from login response)
+  const parentProfileId = user.parentId || user.parentProfileId;
+  const parent = parents.find(p => 
+    p.id === parentProfileId || 
+    p.id === user.id || 
+    p.userId === user.id ||
+    p.userId === user.userId
+  ) || { name: user.name, id: parentProfileId || user.id };
   
-  // 2. Filter players by parentId / userId / email / phone or parent-filtered list
+  // 2. Filter players by parentId - match against Parent table ID and User table ID
   const userPhone = user.phone || (user.email ? user.email.replace(/\D/g, '') : "");
   const myPlayers = (players || []).filter(p => {
     if (!p) return false;
+    // Match by Parent table ID (most reliable)
+    if (parentProfileId && String(p.parentId) === String(parentProfileId)) return true;
+    // Match by User table ID  
     if (String(p.parentId) === String(user.id)) return true;
     if (user.userId && String(p.parentId) === String(user.userId)) return true;
-    if (user.id && String(p.userId) === String(user.id)) return true;
+    // Match by player's userId
+    if (user.id && p.userId && String(p.userId) === String(user.id)) return true;
+    // Match by email (secondary)
     if (user.email && p.email && p.email.toLowerCase() === user.email.toLowerCase()) return true;
-    if (userPhone && p.phone && (String(p.phone).includes(userPhone) || userPhone.includes(String(p.phone)))) return true;
-    if (userPhone && p.parentPhone && (String(p.parentPhone).includes(userPhone) || userPhone.includes(String(p.parentPhone)))) return true;
-    if (String(user.role).toLowerCase() === 'parent') return true;
+    // Match by phone (secondary)
+    if (userPhone && userPhone.length >= 6 && p.phone && (String(p.phone).includes(userPhone) || userPhone.includes(String(p.phone)))) return true;
+    if (userPhone && userPhone.length >= 6 && p.parentPhone && (String(p.parentPhone).includes(userPhone) || userPhone.includes(String(p.parentPhone)))) return true;
+    // NO dangerous fallback - do NOT show all players
     return false;
   });
   

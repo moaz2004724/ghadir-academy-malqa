@@ -252,17 +252,40 @@ app.post('/api/login', async (req, res) => {
     if (isValid && user) {
       const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
       
+      // Build response without spread that could overwrite user.id
+      const userResponse = {
+        id: user.id,
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        role: user.role.toLowerCase(),
+      };
+
+      // Add parentId explicitly (from Parent table)
+      if (user.parentProfile) {
+        userResponse.parentId = user.parentProfile.id;
+        userResponse.parentProfileId = user.parentProfile.id;
+      }
+
+      // Add coachId explicitly (from Coach table)
+      if (user.coachProfile) {
+        userResponse.coachId = user.coachProfile.id;
+        userResponse.coachProfileId = user.coachProfile.id;
+        userResponse.groupId = user.coachProfile.groupId;
+        userResponse.specialty = user.coachProfile.specialty;
+        userResponse.perms = user.coachProfile.perms;
+      }
+
+      // Add playerProfile data without overwriting id
+      if (user.playerProfile) {
+        userResponse.playerId = user.playerProfile.id;
+        userResponse.playerGroupId = user.playerProfile.groupId;
+      }
+
       res.json({
         token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role.toLowerCase(),
-          ...(user.coachProfile || {}),
-          ...(user.parentProfile || {}),
-          ...(user.playerProfile || {})
-        }
+        user: userResponse
       });
     } else {
       res.status(401).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });

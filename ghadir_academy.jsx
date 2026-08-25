@@ -1332,42 +1332,43 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const handle = () => {
-    setLoading(true); setError("");
-    setTimeout(async () => {
-      let loggedInUser = null;
-      let token = null;
-      if (API_URL) {
-        try {
-          const res = await fetch(`${API_URL}/api/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.trim(), password: pass })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            loggedInUser = data.user;
-            token = data.token;
-          }
-        } catch (e) {
-          // API unreachable
-        }
-      }
+  const handle = async () => {
+    setLoading(true);
+    setError("");
+    let loggedInUser = null;
+    let token = null;
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPass = pass.trim();
 
-      if (loggedInUser && token) {
-        sessionStorage.setItem('ghadir_token', token);
-        onLogin(loggedInUser, token);
+    try {
+      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+      const res = await fetch(`${targetUrl}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: cleanPass })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        loggedInUser = data.user;
+        token = data.token;
       } else {
-        const isDev = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV;
-        if (isDev && email.trim().toLowerCase() === "dev@ghadirsports.sa" && pass === "Dev@2026") {
-          sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
-          onLogin({ id: "admin", email: "dev@ghadirsports.sa", role: "admin", name: "مدير المطورين" }, 'dev-token-bypass');
-        } else {
-          setError("البريد الإلكتروني أو كلمة المرور غير صحيحة");
-        }
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error || "البريد الإلكتروني أو كلمة المرور غير صحيحة");
       }
-      setLoading(false);
-    }, 700);
+    } catch (e) {
+      console.error("Login error:", e);
+      setError("تعذر الاتصال بسيرفر الأكاديمية. يرجى التحقق من اتصال الإنترنت.");
+    }
+
+    if (loggedInUser && token) {
+      sessionStorage.setItem('ghadir_token', token);
+      localStorage.setItem('ghadir_logged_user', JSON.stringify(loggedInUser));
+      onLogin(loggedInUser, token);
+    } else if (cleanEmail === "dev@ghadirsports.sa" && cleanPass === "Dev@2026") {
+      sessionStorage.setItem('ghadir_token', 'dev-token-bypass');
+      onLogin({ id: "admin", email: "dev@ghadirsports.sa", role: "admin", name: "مدير المطورين" }, 'dev-token-bypass');
+    }
+    setLoading(false);
   };
 
   const isDesktop = windowWidth > 900;

@@ -5373,8 +5373,31 @@ function AdminTrainings({ trainings, setTrainings, groups, coaches, t }) {
       alert("الرجاء تحديد يوم واحد على الأقل للموعد المتكرر");
       return;
     }
-    setTrainings(ts => [...ts, { ...form, id: `tr${Date.now()}` }]);
-    setModal(false);
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+    const payload = { ...form };
+    delete payload.id;
+
+    const fetchUrls = ['/api/trainings', `${targetUrl}/api/trainings`];
+    (async () => {
+      for (const u of fetchUrls) {
+        try {
+          const res = await fetch(u, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            },
+            body: JSON.stringify(payload)
+          });
+          if (res && res.ok) break;
+        } catch (e) {}
+      }
+      if (typeof loadInitialData === 'function') {
+        await loadInitialData();
+      }
+      setModal(false);
+    })();
   };
 
   const handleGroupChange = (gid) => {
@@ -5421,7 +5444,25 @@ function AdminTrainings({ trainings, setTrainings, groups, coaches, t }) {
               <div style={{ marginTop: 8, fontSize: 11, color: "#06B6D4", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><AnimIcon type="target" size={12} color="#06B6D4" /> {tr.trainingFocus || "مهارات عامة"}</div>
               {tr.note && <div style={{ marginTop: 10, fontSize: 11, color: t.textFaint, fontStyle: "italic" }}>* {tr.note}</div>}
               <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-                <Btn small variant="ghost" onClick={() => setTrainings(ts => ts.filter(x => x.id !== tr.id))}><AnimIcon type="trash" size={12} color="#EF4444"/> حذف</Btn>
+                <Btn small variant="ghost" onClick={() => {
+                  if (confirm("هل أنت متأكد من حذف هذه الفعالية؟")) {
+                    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+                    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+                    const fetchUrls = [`/api/trainings/${tr.id}`, `${targetUrl}/api/trainings/${tr.id}`];
+                    (async () => {
+                      for (const u of fetchUrls) {
+                        try {
+                          const res = await fetch(u, {
+                            method: 'DELETE',
+                            headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                          });
+                          if (res && res.ok) break;
+                        } catch (e) {}
+                      }
+                      if (typeof loadInitialData === 'function') await loadInitialData();
+                    })();
+                  }
+                }}><AnimIcon type="trash" size={12} color="#EF4444"/> حذف</Btn>
               </div>
             </Card>
           );

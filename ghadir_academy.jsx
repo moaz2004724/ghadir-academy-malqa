@@ -1816,64 +1816,65 @@ export default function App() {
   const isFirstFetchRef = useRef(true);
 
   // Fetch from API (Clean Initial Load - Single Source of Truth)
+  const loadInitialData = useCallback(async () => {
+    try {
+      const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+      if (!savedToken) return null;
+
+      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+      let res = null;
+      
+      const fetchUrls = ['/api/initial-data', `${targetUrl}/api/initial-data`];
+      for (const u of fetchUrls) {
+        try {
+          res = await fetch(u, {
+            headers: { 'Authorization': `Bearer ${savedToken}` }
+          });
+          if (res && res.ok) break;
+        } catch (err) {}
+      }
+
+      if (res && res.ok) {
+        const data = await res.json();
+
+        if (data.players && Array.isArray(data.players)) {
+          setPlayers(data.players);
+        }
+        if (data.coaches) setCoaches(data.coaches);
+        if (data.groups) {
+          const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
+          setGroups(cleanGroups);
+        }
+        if (data.payments) setPayments(data.payments);
+        if (data.attendance) setAttendance(data.attendance);
+        if (data.coachesAttendance) setCoachesAttendance(data.coachesAttendance);
+        if (data.evals) setEvals(data.evals);
+        if (data.messages) setMessages(data.messages);
+        if (data.trainings) setTrainings(data.trainings);
+        if (data.parents) setParents(data.parents);
+        
+        setSyncStatus("synced");
+        return data;
+      } else if (res && res.status === 401) {
+        setSyncStatus("error");
+        setUser(null);
+        setToken("");
+        localStorage.removeItem('ghadir_logged_user');
+        localStorage.removeItem('ghadir_token');
+        sessionStorage.removeItem('ghadir_token');
+      }
+    } catch (e) {
+      console.error("API Fetch Error:", e);
+    } finally {
+      setIsAppLoading(false);
+    }
+    return null;
+  }, [token, user]);
+
   useEffect(() => {
     if (!user) return;
-
-    const loadInitialData = async () => {
-      try {
-        const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-        if (!savedToken) return;
-
-        const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-        let res = null;
-        
-        const fetchUrls = ['/api/initial-data', `${targetUrl}/api/initial-data`];
-        for (const u of fetchUrls) {
-          try {
-            res = await fetch(u, {
-              headers: { 'Authorization': `Bearer ${savedToken}` }
-            });
-            if (res && res.ok) break;
-          } catch (err) {}
-        }
-
-        if (res && res.ok) {
-          const data = await res.json();
-
-          if (data.players && Array.isArray(data.players)) {
-            setPlayers(data.players);
-          }
-          if (data.coaches) setCoaches(data.coaches);
-          if (data.groups) {
-            const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-            setGroups(cleanGroups);
-          }
-          if (data.payments) setPayments(data.payments);
-          if (data.attendance) setAttendance(data.attendance);
-          if (data.coachesAttendance) setCoachesAttendance(data.coachesAttendance);
-          if (data.evals) setEvals(data.evals);
-          if (data.messages) setMessages(data.messages);
-          if (data.trainings) setTrainings(data.trainings);
-          if (data.parents) setParents(data.parents);
-          
-          setSyncStatus("synced");
-        } else if (res && res.status === 401) {
-          setSyncStatus("error");
-          setUser(null);
-          setToken("");
-          localStorage.removeItem('ghadir_logged_user');
-          localStorage.removeItem('ghadir_token');
-          sessionStorage.removeItem('ghadir_token');
-        }
-      } catch (e) {
-        console.error("API Fetch Error:", e);
-      } finally {
-        setIsAppLoading(false);
-      }
-    };
-
     loadInitialData();
-  }, [user, token]);
+  }, [user, loadInitialData]);
 
   useEffect(() => {
     // Only save theme preference to localStorage - NOT business data
@@ -2213,14 +2214,14 @@ function AdminPortal({ user, onLogout, groups, setGroups, coaches, setCoaches, p
   ];
   return (
     <Shell title="لوحة الإدارة" subtitle="أكاديمية غدير الرياضية - فرع الملقا" color="#2563EB" icon="dashboard" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge="مدير عام" user={user} t={t} syncStatus={syncStatus}>
-      {tab === "overview"  && <AdminOverview players={players} coaches={coaches} groups={groups} payments={payments} attendance={attendance} trainings={trainings} t={t} parents={parents} messages={messages} setMessages={setMessages} setTab={setTab} setSelectedPlayerId={setSelectedPlayerId} />}
-      {tab === "teams"     && <AdminTeams groups={groups} setGroups={setGroups} coaches={coaches} players={players} setPlayers={setPlayers} t={t} />}
-      {tab === "attendance" && <AdminAttendance groups={groups} players={players} coaches={coaches} attendance={attendance} setAttendance={setAttendance} coachesAttendance={coachesAttendance} setCoachesAttendance={setCoachesAttendance} t={t} payments={payments} trainings={trainings} />}
-      {tab === "coaches"   && <AdminCoaches coaches={coaches} setCoaches={setCoaches} groups={groups} players={players} payments={payments} t={t} />}
-      {tab === "players"   && <AdminPlayers players={players} setPlayers={setPlayers} groups={groups} parents={parents} evals={evals} coaches={coaches} t={t} trainings={trainings} attendance={attendance} payments={payments} selectedPlayerId={selectedPlayerId} setSelectedPlayerId={setSelectedPlayerId} />}
-      {tab === "payments"  && <AdminPayments payments={payments} setPayments={setPayments} players={players} coaches={coaches} parents={parents} prices={prices} t={t} attendance={attendance} setAttendance={setAttendance} trainings={trainings} groups={groups} />}
-      {tab === "prices"    && <AdminPrices prices={prices} setPrices={setPrices} t={t} groups={groups} setGroups={setGroups} />}
-      {tab === "schedule"  && <AdminTrainings trainings={trainings} setTrainings={setTrainings} groups={groups} coaches={coaches} t={t} />}
+      {tab === "overview"  && <AdminOverview players={players} coaches={coaches} groups={groups} payments={payments} attendance={attendance} trainings={trainings} t={t} parents={parents} messages={messages} setMessages={setMessages} setTab={setTab} setSelectedPlayerId={setSelectedPlayerId} loadInitialData={loadInitialData} />}
+      {tab === "teams"     && <AdminTeams groups={groups} setGroups={setGroups} coaches={coaches} players={players} setPlayers={setPlayers} t={t} loadInitialData={loadInitialData} />}
+      {tab === "attendance" && <AdminAttendance groups={groups} players={players} coaches={coaches} attendance={attendance} setAttendance={setAttendance} coachesAttendance={coachesAttendance} setCoachesAttendance={setCoachesAttendance} t={t} payments={payments} trainings={trainings} loadInitialData={loadInitialData} />}
+      {tab === "coaches"   && <AdminCoaches coaches={coaches} setCoaches={setCoaches} groups={groups} players={players} payments={payments} t={t} loadInitialData={loadInitialData} />}
+      {tab === "players"   && <AdminPlayers players={players} setPlayers={setPlayers} groups={groups} parents={parents} evals={evals} coaches={coaches} t={t} trainings={trainings} attendance={attendance} payments={payments} selectedPlayerId={selectedPlayerId} setSelectedPlayerId={setSelectedPlayerId} loadInitialData={loadInitialData} />}
+      {tab === "payments"  && <AdminPayments payments={payments} setPayments={setPayments} players={players} coaches={coaches} parents={parents} prices={prices} t={t} attendance={attendance} setAttendance={setAttendance} trainings={trainings} groups={groups} loadInitialData={loadInitialData} />}
+      {tab === "prices"    && <AdminPrices prices={prices} setPrices={setPrices} t={t} groups={groups} setGroups={setGroups} loadInitialData={loadInitialData} />}
+      {tab === "schedule"  && <AdminTrainings trainings={trainings} setTrainings={setTrainings} groups={groups} coaches={coaches} t={t} loadInitialData={loadInitialData} />}
       {tab === "reports"   && <AdminReports players={players} coaches={coaches} groups={groups} payments={payments} attendance={attendance} evals={evals} t={t} />}
       {tab === "events"    && <AdminEvents players={players} groups={groups} parents={parents} payments={payments} trainings={trainings} attendance={attendance} t={t} />}
       {tab === "messages"  && <Messaging messages={messages} setMessages={setMessages} meId="admin" meName="الإدارة" coaches={coaches} parents={parents} t={t} />}
@@ -2998,7 +2999,7 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
   );
 }
 /* ── Admin Teams (NEW) ──────────────────────────────── */
-function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t }) {
+function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t, loadInitialData }) {
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({ name: "", coachId: "", color: "#06B6D4", price: 350 });
   const [selGroup, setSelGroup] = useState(null);
@@ -3526,7 +3527,7 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t }) {
 }
 
 /* ── Admin Players ──────────────────────────────────── */
-function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t, trainings, attendance, payments, selectedPlayerId, setSelectedPlayerId }) {
+function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t, trainings, attendance, payments, selectedPlayerId, setSelectedPlayerId, loadInitialData }) {
   const [sel, setSel]   = useState(selectedPlayerId || null);
   const [modal, setModal] = useState(false);
   const [freezeModal, setFreezeModal] = useState(null);
@@ -3896,16 +3897,42 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
               </div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <Btn onClick={() => {
+              <Btn onClick={async () => {
                 if (form.nationalId && form.nationalId.trim()) {
-                  const exists = players.some(p => p.nationalId === form.nationalId.trim() && p.id !== form.id);
+                  const exists = (players || []).some(p => p.nationalId === form.nationalId.trim() && p.id !== form.id);
                   if (exists) {
                     alert("اللاعب مسجل مسبقاً برقم الهوية هذا!");
                     return;
                   }
                 }
-                setPlayers(ps => ps.map(x => x.id === form.id ? { ...form } : x));
-                setModal(null);
+                const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+                const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+                const payload = { ...form };
+                const fetchUrls = [`/api/players/${form.id}`, `${targetUrl}/api/players/${form.id}`];
+
+                let res = null;
+                for (const u of fetchUrls) {
+                  try {
+                    res = await fetch(u, {
+                      method: 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+                      },
+                      body: JSON.stringify(payload)
+                    });
+                    if (res && res.ok) break;
+                  } catch (e) {}
+                }
+
+                if (res && res.ok) {
+                  if (typeof loadInitialData === 'function') {
+                    await loadInitialData();
+                  }
+                  setModal(null);
+                } else {
+                  alert("حدث خطأ أثناء تعديل بيانات اللاعب");
+                }
               }} style={{ flex: 1 }}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="save" size={14} color="currentColor" /> حفظ</span></Btn>
               <Btn variant="secondary" onClick={() => setModal(null)}>إلغاء</Btn>
             </div>
@@ -4021,25 +4048,35 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                   <td style={{ padding: "11px 14px" }}><Chip text={p.status} color={p.status === "نشط" ? "#10B981" : p.status === "مجمد" ? "#3B82F6" : "#EF4444"}/></td>
                   <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 800, color: p.score > 80 ? "#10B981" : p.score > 60 ? "#F59E0B" : "#EF4444" }}>{p.score}</td>
                   <td style={{ padding: "11px 14px" }}>
-                    <button onClick={e => { 
+                    <button onClick={async (e) => { 
                       e.stopPropagation(); 
-                      if (window.confirm("هل أنت تأكد من حذف هذا اللاعب؟")) {
+                      if (window.confirm("هل أنت متأكد من حذف هذا اللاعب؟")) {
                         const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
                         const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-                        fetch(`${targetUrl}/api/players/${p.id}`, {
-                          method: 'DELETE',
-                          headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
-                        }).then(res => {
-                          if (res.ok) {
-                            if (typeof loadInitialData === 'function') {
-                              loadInitialData();
-                            } else if (typeof setPlayers === 'function') {
-                              fetch(`${targetUrl}/api/players`, {
-                                headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
-                              }).then(r => r.json()).then(data => { if (Array.isArray(data)) setPlayers(data); });
-                            }
+                        const fetchUrls = [`/api/players/${p.id}`, `${targetUrl}/api/players/${p.id}`];
+
+                        let res = null;
+                        for (const u of fetchUrls) {
+                          try {
+                            res = await fetch(u, {
+                              method: 'DELETE',
+                              headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                            });
+                            if (res && res.ok) break;
+                          } catch (err) {}
+                        }
+
+                        if (res && res.ok) {
+                          if (typeof loadInitialData === 'function') {
+                            await loadInitialData();
                           }
-                        });
+                          if (sel === p.id) {
+                            setSel(null);
+                            if (setSelectedPlayerId) setSelectedPlayerId(null);
+                          }
+                        } else {
+                          alert("حدث خطأ أثناء حذف اللاعب");
+                        }
                       }
                     }}
                       style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "rgba(239,68,68,.1)", color: "#EF4444", cursor: "pointer", display: "grid", placeItems: "center" }}>
@@ -4196,20 +4233,8 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                 }
 
                 if (res && res.ok) {
-                  let freshData = null;
-                  for (const u of fetchUrls) {
-                    try {
-                      const r = await fetch(u, {
-                        headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
-                      });
-                      if (r && r.ok) {
-                        freshData = await r.json();
-                        break;
-                      }
-                    } catch (e) {}
-                  }
-                  if (Array.isArray(freshData)) {
-                    setPlayers(freshData);
+                  if (typeof loadInitialData === 'function') {
+                    await loadInitialData();
                   }
                   setModal(null);
                 } else {
@@ -4974,9 +4999,30 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="edit" size={12} color="currentColor" /> تعديل</span>
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (confirm(`هل أنت متأكد من حذف هذه المعاملة الخاصة بـ ${p.playerName} بقيمة ${fmtMoney(p.amount - (p.discount || 0))}؟`)) {
-                            setPayments(ps => ps.filter(x => x.id !== p.id));
+                            const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+                            const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+                            const fetchUrls = [`/api/payments/${p.id}`, `${targetUrl}/api/payments/${p.id}`];
+
+                            let res = null;
+                            for (const u of fetchUrls) {
+                              try {
+                                res = await fetch(u, {
+                                  method: 'DELETE',
+                                  headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                                });
+                                if (res && res.ok) break;
+                              } catch (err) {}
+                            }
+
+                            if (res && res.ok) {
+                              if (typeof loadInitialData === 'function') {
+                                await loadInitialData();
+                              }
+                            } else {
+                              alert("حدث خطأ أثناء حذف المعاملة المالية");
+                            }
                           }
                         }}
                         title="حذف المعاملة"
@@ -5128,7 +5174,7 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
   );
 }
 
-function AdminPrices({ prices, setPrices, t, groups, setGroups }) {
+function AdminPrices({ prices, setPrices, t, groups, setGroups, loadInitialData }) {
   const [form, setForm] = useState(() => {
     const initialForm = { ...prices };
     (groups || []).forEach(g => {
@@ -5861,7 +5907,7 @@ function AdminReports({ players, coaches, groups, payments, attendance, evals, t
    COACH PORTAL (Permissions-aware)
 ══════════════════════════════════════════════════════════ */
 /* ── Admin Attendance (NEW) ─────────────────────────── */
-function AdminAttendance({ groups, players, coaches, attendance, setAttendance, coachesAttendance, setCoachesAttendance, t, payments, trainings }) {
+function AdminAttendance({ groups, players, coaches, attendance, setAttendance, coachesAttendance, setCoachesAttendance, t, payments, trainings, loadInitialData }) {
   const [subTab, setSubTab] = useState("players");
   const [selGroup, setSelGroup] = useState(groups[0]?.id || "");
   const [date, setDate] = useState("");
@@ -5905,13 +5951,32 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
     }
   }, [date, selGroup, subTab, attendance, coachesAttendance, players, coaches, payments, trainings]);
 
-  const save = () => {
+  const save = async () => {
     if (subTab === "players") {
-      const newAtt = { id: `att${Date.now()}`, date, groupId: selGroup, records };
-      setAttendance(prev => {
-        const filtered = prev.filter(a => !(compareDates(a.date, date) && a.groupId === selGroup));
-        return [...filtered, newAtt];
-      });
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+      const payload = {
+        date,
+        groupId: selGroup,
+        records
+      };
+      const fetchUrls = ['/api/attendance', `${targetUrl}/api/attendance`];
+      for (const u of fetchUrls) {
+        try {
+          const res = await fetch(u, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            },
+            body: JSON.stringify(payload)
+          });
+          if (res && res.ok) break;
+        } catch (e) {}
+      }
+      if (typeof loadInitialData === 'function') {
+        await loadInitialData();
+      }
     } else {
       const newAtt = { id: `ca${Date.now()}`, date, records };
       setCoachesAttendance(prev => {

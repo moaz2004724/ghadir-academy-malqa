@@ -1830,6 +1830,8 @@ export default function App() {
 
       try {
         const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+        console.log("[FETCH DATA] started");
+        console.log("[AUTH] token exists:", Boolean(savedToken), "| length:", savedToken ? savedToken.length : 0);
         if (!savedToken) {
           console.warn("No auth token available for fetchData");
           return;
@@ -1849,8 +1851,12 @@ export default function App() {
           } catch (err2) {}
         }
 
+        console.log("[INITIAL DATA] status:", res ? res.status : "NO_RES");
+
         if (res && res.ok) {
           const data = await res.json();
+          console.log("[INITIAL DATA] players received:", data.players?.length);
+          console.log("[INITIAL DATA] FINAL_UI_TEST_001 found:", data.players?.some(p => p.name === "FINAL_UI_TEST_001" || p.id === "FINAL_UI_TEST_001"));
           
           // On background polls, skip setting state if a write happened during the fetch
           if (!isFirstFetchRef.current && pendingSyncsRef.current > 0) {
@@ -1884,6 +1890,7 @@ export default function App() {
                 password: migrated.password || `ghadir_${phone.slice(-4)}`
               };
             });
+            console.log("[STATE] setting players:", repaired.length);
             setPlayers(repaired);
           }
           if (data.coaches) setCoaches(data.coaches.map(migrateItem));

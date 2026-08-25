@@ -946,57 +946,61 @@ app.post('/api/coaches', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
     const isBcryptCreate = plainPassword.startsWith('$2a$') || plainPassword.startsWith('$2b$');
     const email = c.email || `coach_${Date.now()}@ghadirsports.sa`;
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: isBcryptCreate ? plainPassword : bcrypt.hashSync(plainPassword, 10),
-        encryptedPassword: isBcryptCreate ? null : encryptPassword(plainPassword),
-        name: c.name,
-        phone: c.phone || null,
-        role: 'COACH'
-      }
-    });
-
-    let validGroupId = null;
-    if (c.groupId && c.groupId !== 'none') {
-      const groupExists = await prisma.group.findUnique({ where: { id: c.groupId } });
-      if (groupExists) validGroupId = c.groupId;
-    }
-
-    if (validGroupId) {
-      await prisma.coach.updateMany({
-        where: { groupId: validGroupId },
-        data: { groupId: null }
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: isBcryptCreate ? plainPassword : bcrypt.hashSync(plainPassword, 10),
+          encryptedPassword: isBcryptCreate ? null : encryptPassword(plainPassword),
+          name: c.name,
+          phone: c.phone || null,
+          role: 'COACH'
+        }
       });
-    }
 
-    const coach = await prisma.coach.create({
-      data: {
-        specialty: c.specialty,
-        perms: c.perms,
-        salary: c.salary ? parseFloat(c.salary) : null,
-        exp: c.exp ? parseInt(c.exp) : null,
-        cert: c.cert,
-        user: { connect: { id: user.id } },
-        group: validGroupId ? { connect: { id: validGroupId } } : undefined
+      let validGroupId = null;
+      if (c.groupId && c.groupId !== 'none') {
+        const groupExists = await tx.group.findUnique({ where: { id: c.groupId } });
+        if (groupExists) validGroupId = c.groupId;
       }
-    });
 
-    if (validGroupId) {
-      await prisma.group.update({
-        where: { id: validGroupId },
-        data: { coachId: coach.id }
+      if (validGroupId) {
+        await tx.coach.updateMany({
+          where: { groupId: validGroupId },
+          data: { groupId: null }
+        });
+      }
+
+      const coach = await tx.coach.create({
+        data: {
+          specialty: c.specialty,
+          perms: c.perms,
+          salary: c.salary ? parseFloat(c.salary) : null,
+          exp: c.exp ? parseInt(c.exp) : null,
+          cert: c.cert,
+          user: { connect: { id: user.id } },
+          group: validGroupId ? { connect: { id: validGroupId } } : undefined
+        }
       });
-    }
+
+      if (validGroupId) {
+        await tx.group.update({
+          where: { id: validGroupId },
+          data: { coachId: coach.id }
+        });
+      }
+
+      return { coach, user };
+    });
 
     res.status(201).json({
-      id: coach.id,
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      specialty: coach.specialty,
-      groupId: coach.groupId
+      id: result.coach.id,
+      userId: result.user.id,
+      name: result.user.name,
+      email: result.user.email,
+      phone: result.user.phone,
+      specialty: result.coach.specialty,
+      groupId: result.coach.groupId
     });
   } catch (e) {
     console.error("Coach create error:", e);

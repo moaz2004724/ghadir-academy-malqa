@@ -1731,7 +1731,6 @@ export default function App() {
   };
 
   const syncWithAPI = async (table, item, isDeleted = false) => {
-    if (!API_URL) return;
     markLocalWrite();
     pendingSyncsRef.current++;
     setSyncStatus("syncing");
@@ -1748,29 +1747,31 @@ export default function App() {
       };
       
       const path = endpointMap[table] || table;
-      let url = `${API_URL}/api/${path}`;
-      let method = 'POST';
-      const savedToken = token || sessionStorage.getItem('ghadir_token');
+      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+      const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       let headers = { 
         'Content-Type': 'application/json',
         ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
       };
-      let body = JSON.stringify(item);
+      let body = isDeleted ? undefined : JSON.stringify(item);
+      let method = isDeleted ? 'DELETE' : 'POST';
 
-      if (isDeleted) {
-        url = `${API_URL}/api/${path}/${item.id}`;
-        method = 'DELETE';
-        body = undefined;
-      }
+      const urlsToTry = [
+        isDeleted ? `${targetUrl}/api/${path}/${item.id}` : `${targetUrl}/api/${path}`,
+        isDeleted ? `/api/${path}/${item.id}` : `/api/${path}`
+      ];
 
-      const res = await fetch(url, { method, headers, body });
-      if (!res.ok) {
-        // 404 on delete is fine - item was already removed
-        if (isDeleted && res.status === 404) {
-          // Item already gone - not an error
-        } else {
-          const errorData = await res.json().catch(() => ({}));
-          console.warn(`Sync warning for ${table}:`, errorData.error || res.status);
+      let success = false;
+      for (const u of urlsToTry) {
+        if (success) break;
+        try {
+          const res = await fetch(u, { method, headers, body });
+          if (res.ok || (isDeleted && res.status === 404)) {
+            success = true;
+            break;
+          }
+        } catch (err) {
+          // try next
         }
       }
       markLocalWrite();
@@ -1788,12 +1789,17 @@ export default function App() {
   useEffect(() => {
     if (user) {
       localStorage.setItem('ghadir_logged_user', JSON.stringify(user));
+      if (token) {
+        localStorage.setItem('ghadir_token', token);
+        sessionStorage.setItem('ghadir_token', token);
+      }
     } else {
       localStorage.removeItem('ghadir_logged_user');
+      localStorage.removeItem('ghadir_token');
       sessionStorage.removeItem('ghadir_token');
       setToken("");
     }
-  }, [user]);
+  }, [user, token]);
 
   // Self-healing migration for legacy local data strings
   useEffect(() => {

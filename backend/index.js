@@ -138,6 +138,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', dbHost, version: 'secure-jwt-v4' });
 });
 
+const parseSafeDate = (d) => {
+  if (!d) return new Date();
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) {
+    return new Date();
+  }
+  return parsed;
+};
+
 app.post('/api/reset-database', async (req, res) => {
   const { secret } = req.body;
   if (secret !== 'GhadirLaunch2026') {
@@ -629,7 +638,7 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
           weight: resolvedWeight,
           height: resolvedHeight,
           score: p.score ? +p.score : null,
-          joinDate: p.joinDate ? new Date(p.joinDate) : undefined,
+          joinDate: parseSafeDate(p.joinDate),
           bus: p.bus,
           nationalId: p.nationalId ? p.nationalId.trim() : null,
           freezeRanges: p.freezeRanges,
@@ -647,7 +656,7 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
           weight: resolvedWeight,
           height: resolvedHeight,
           score: p.score ? +p.score : 80,
-          joinDate: p.joinDate ? new Date(p.joinDate) : undefined,
+          joinDate: parseSafeDate(p.joinDate),
           bus: p.bus,
           nationalId: p.nationalId ? p.nationalId.trim() : null,
           freezeRanges: p.freezeRanges,
@@ -679,9 +688,9 @@ app.post('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN'
         coachName, 
         type, 
         month, 
-        amount: parseFloat(amount),
+        amount: parseFloat(amount || 0),
         discount: resolvedDiscount,
-        date: new Date(date), 
+        date: parseSafeDate(date), 
         note,
         packageName,
         sessionsCount: resolvedSessions
@@ -694,9 +703,9 @@ app.post('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN'
         coachName, 
         type, 
         month, 
-        amount: parseFloat(amount),
+        amount: parseFloat(amount || 0),
         discount: resolvedDiscount,
-        date: new Date(date), 
+        date: parseSafeDate(date), 
         note,
         packageName,
         sessionsCount: resolvedSessions
@@ -728,10 +737,10 @@ app.post('/api/attendance', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMI
 
     const att = await prisma.attendance.upsert({
       where: { id: a.id },
-      update: { records: a.records },
+      update: { records: a.records, date: parseSafeDate(a.date) },
       create: { 
         id: a.id, 
-        date: new Date(a.date), 
+        date: parseSafeDate(a.date), 
         records: a.records,
         group: validGroupId ? { connect: { id: validGroupId } } : undefined,
         coach: validCoachId ? { connect: { id: validCoachId } } : undefined
@@ -739,6 +748,7 @@ app.post('/api/attendance', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMI
     });
     res.json(att);
   } catch (e) {
+    console.error("Attendance error:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -960,7 +970,7 @@ app.post('/api/trainings', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN
         days: t.days || [], 
         time: t.time || "4:00 م", duration: t.duration ? +t.duration : 90, field: t.field || "ملعب A", 
         title: t.title, trainingFocus: t.trainingFocus, note: t.note,
-        date: t.date ? new Date(t.date) : null,
+        date: t.date ? parseSafeDate(t.date) : null,
         isRecurring: t.isRecurring !== undefined ? !!t.isRecurring : true,
         type: t.type || "training",
         isFriendly: t.isFriendly !== undefined ? !!t.isFriendly : false,
@@ -972,7 +982,7 @@ app.post('/api/trainings', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN
         days: t.days || [], 
         time: t.time || "4:00 م", duration: t.duration ? +t.duration : 90, field: t.field || "ملعب A", 
         title: t.title, trainingFocus: t.trainingFocus, note: t.note,
-        date: t.date ? new Date(t.date) : null,
+        date: t.date ? parseSafeDate(t.date) : null,
         isRecurring: t.isRecurring !== undefined ? !!t.isRecurring : true,
         type: t.type || "training",
         isFriendly: t.isFriendly !== undefined ? !!t.isFriendly : false,
@@ -992,14 +1002,14 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
     const { id, from, to, fromName, toName, text, files, date, read } = req.body;
     
     // Prevent sender spoofing
-    if (from !== req.user.id) {
+    if (from !== req.user.id && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ error: 'غير مصرح بإرسال رسائل باسم حساب آخر' });
     }
 
     const msg = await prisma.message.upsert({
       where: { id: id || 'new' },
-      update: { read },
-      create: { id, from, to, fromName, toName, text, files, date: new Date(date), read: !!read }
+      update: { read: !!read },
+      create: { id, from, to, fromName, toName, text, files, date: parseSafeDate(date), read: !!read }
     });
     res.json(msg);
   } catch (e) {
@@ -1012,26 +1022,33 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
 app.post('/api/evaluations', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN', 'COACH']), async (req, res) => {
   const e = req.body;
   try {
+    let validCoachId = e.coachId;
+    let coachExists = validCoachId ? await prisma.coach.findUnique({ where: { id: validCoachId } }) : null;
+    if (!coachExists) {
+      const firstCoach = await prisma.coach.findFirst();
+      validCoachId = firstCoach?.id;
+    }
+
     const evaluation = await prisma.evaluation.upsert({
       where: { id: e.id || 'new' },
       update: { 
-        date: new Date(e.date), 
+        date: parseSafeDate(e.date), 
         note: e.note, 
         speed: parseInt(e.speed) || 80, 
         technique: parseInt(e.technique) || 80, 
         teamwork: parseInt(e.teamwork) || 80,
         player: { connect: { id: e.playerId } },
-        coach: { connect: { id: e.coachId } }
+        ...(validCoachId ? { coach: { connect: { id: validCoachId } } } : {})
       },
       create: { 
         id: e.id, 
-        date: new Date(e.date), 
+        date: parseSafeDate(e.date), 
         note: e.note, 
         speed: parseInt(e.speed) || 80, 
         technique: parseInt(e.technique) || 80, 
         teamwork: parseInt(e.teamwork) || 80,
         player: { connect: { id: e.playerId } },
-        coach: { connect: { id: e.coachId } }
+        ...(validCoachId ? { coach: { connect: { id: validCoachId } } } : {})
       }
     });
 

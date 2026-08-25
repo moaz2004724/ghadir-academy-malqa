@@ -1855,11 +1855,10 @@ export default function App() {
 
         if (res && res.ok) {
           const data = await res.json();
-          console.log("[REAL BROWSER FETCH]", {
-            token: !!savedToken,
-            status: res ? res.status : null,
-            players: data.players?.length,
-            testPlayer: data.players?.find(p => p.name === "BROWSER_REAL_TEST_001" || p.name === "FINAL_UI_TEST_001")
+          console.log("[REAL DEBUG AFTER REFRESH]", {
+            playerFound: data.players?.some(p => p.name === "REAL_CHROME_TEST_2026"),
+            playersCount: data.players?.length,
+            player: data.players?.find(p => p.name === "REAL_CHROME_TEST_2026")
           });
           
           // On background polls, skip setting state if a write happened during the fetch
@@ -3505,6 +3504,11 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
   const [freezeModal, setFreezeModal] = useState(null);
   const [search, setSearch] = useState("");
   const [fg, setFg] = useState("الكل");
+  console.log("[REAL ADMIN PLAYERS]", {
+    totalPlayers: players?.length,
+    targetPlayer: players?.find(p => p.name === "REAL_CHROME_TEST_2026"),
+    filter: fg
+  });
   const emptyP = { name: "", age: "", groupId: groups[0]?.id || "", phone: "", position: "مهاجم", status: "نشط", score: 80, speed: 75, stamina: 75, technique: 75, teamwork: 75, goals: 0, assists: 0, attendancePct: 90, weight: "", height: "", parentId: "__new__", email: "", password: "", bus: "" };
   const [form, setForm] = useState(emptyP);
   const filtered = (players || []).filter(p => {
@@ -3515,6 +3519,11 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     const matchesSearch = !cleanSearch || pName.includes(cleanSearch) || gName.includes(cleanSearch);
     const matchesGroup = fg === "الكل" || p.groupId === fg;
     return matchesSearch && matchesGroup;
+  });
+  console.log("[REAL FILTERED]", {
+    filteredCount: filtered?.length,
+    targetPlayer: filtered?.find(p => p.name === "REAL_CHROME_TEST_2026"),
+    filter: fg
   });
 
   useEffect(() => {

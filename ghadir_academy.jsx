@@ -1858,7 +1858,7 @@ export default function App() {
 
         if (res && res.ok) {
           const data = await res.json();
-          const targetInInitial = data.players?.find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+          const targetInInitial = data.players?.find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
           console.log("[PLAYER REFRESH TRACE - AFTER INITIAL DATA]", {
             targetExists: Boolean(targetInInitial),
             targetId: targetInInitial?.id,
@@ -1900,9 +1900,10 @@ export default function App() {
                 password: migrated.password || `ghadir_${phone.slice(-4)}`
               };
             });
-            const targetInRepaired = repaired?.find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+            const targetInRepaired = repaired?.find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
             console.log("[PLAYER REFRESH TRACE - AFTER STATE]", {
               targetExists: Boolean(targetInRepaired),
+              targetId: targetInRepaired?.id,
               playersCount: repaired?.length
             });
             console.log("[PLAYERS DEBUG 2] setPlayers count:", repaired.length);
@@ -3538,8 +3539,8 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     return matchesSearch && matchesGroup;
   });
 
-  const targetInPlayers = (players || []).find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
-  const targetInFiltered = (filtered || []).find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+  const targetInPlayers = (players || []).find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
+  const targetInFiltered = (filtered || []).find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
   
   console.log("[PLAYER REFRESH TRACE - FILTER]", {
     fg,

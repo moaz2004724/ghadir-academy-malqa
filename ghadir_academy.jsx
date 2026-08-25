@@ -1858,15 +1858,6 @@ export default function App() {
 
         if (res && res.ok) {
           const data = await res.json();
-          const targetInInitial = data.players?.find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
-          console.log("[PLAYER REFRESH TRACE - AFTER INITIAL DATA]", {
-            targetExists: Boolean(targetInInitial),
-            targetId: targetInInitial?.id,
-            targetGroupId: targetInInitial?.groupId,
-            playersCount: data.players?.length
-          });
-          console.log("[PLAYERS DEBUG 1]", { status: res.status, playersCount: data.players?.length, sample: data.players?.slice(0, 3) });
-          console.log("[API ORDER] REQUEST END: GET /api/initial-data", { returnedPlayers: data.players?.length });
           
           // On background polls, skip setting state if a write happened during the fetch
           if (!isFirstFetchRef.current && pendingSyncsRef.current > 0) {
@@ -1900,13 +1891,6 @@ export default function App() {
                 password: migrated.password || `ghadir_${phone.slice(-4)}`
               };
             });
-            const targetInRepaired = repaired?.find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
-            console.log("[PLAYER REFRESH TRACE - AFTER STATE]", {
-              targetExists: Boolean(targetInRepaired),
-              targetId: targetInRepaired?.id,
-              playersCount: repaired?.length
-            });
-            console.log("[PLAYERS DEBUG 2] setPlayers count:", repaired.length);
             setPlayers(repaired);
           }
           if (data.coaches) setCoaches(data.coaches.map(migrateItem));
@@ -2036,7 +2020,6 @@ export default function App() {
     },
     players,
     setPlayers: (val) => {
-      console.trace("[REAL BROWSER shared.setPlayers]", { type: typeof val, isArray: Array.isArray(val) });
       if (typeof val === 'function') {
         markLocalWrite();
         setPlayers(prev => {
@@ -3537,29 +3520,6 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     const matchesSearch = !cleanSearch || pName.includes(cleanSearch) || gName.includes(cleanSearch);
     const matchesGroup = fg === "الكل" || p.groupId === fg;
     return matchesSearch && matchesGroup;
-  });
-
-  const targetInPlayers = (players || []).find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
-  const targetInFiltered = (filtered || []).find(p => p.name && (p.name.includes("MY_REAL_REFRESH_TEST_2026") || p.name.includes("REFRESH_DISAPPEAR_TEST_2026") || p.name.includes("TEST")));
-  
-  console.log("[PLAYER REFRESH TRACE - FILTER]", {
-    fg,
-    targetGroupId: targetInPlayers?.groupId,
-    targetInFiltered: Boolean(targetInFiltered),
-    filteredCount: filtered?.length
-  });
-  console.log("[PLAYER REFRESH TRACE - PAGINATION]", {
-    page: 1,
-    pageSize: filtered?.length,
-    pageItemsCount: filtered?.length
-  });
-  console.log("[PLAYER REFRESH TRACE - RENDER]", {
-    component: "AdminPlayers",
-    targetRendered: Boolean(targetInFiltered)
-  });
-  console.log("[PLAYER REFRESH TRACE - EMPTY STATE]", {
-    value: filtered?.length,
-    reason: filtered?.length === 0 ? "filtered array is empty" : "none"
   });
 
   useEffect(() => {

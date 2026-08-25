@@ -438,6 +438,8 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
       prisma.parent.findMany({ include: { user: true } })
     ]);
 
+    console.log(`[GET /api/initial-data] User: ${req.user.id} (${req.user.role}) | Total Players in DB: ${playersRaw.length}`);
+
     // Strip passwords and format coaches and parents
     const coaches = coachesRaw.map(c => {
       const { password, encryptedPassword, ...userWithoutPassword } = c.user || {};

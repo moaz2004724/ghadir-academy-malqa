@@ -1857,9 +1857,9 @@ export default function App() {
     });
   }, []);
 
-  // Fetch from API if configured (with automatic background polling every 6s)
+  // Fetch from API (with automatic background polling every 6s)
   useEffect(() => {
-    if (!API_URL || !user) return;
+    if (!user) return;
 
     const fetchData = async () => {
       // Skip background update if we are actively syncing or a local write occurred recently
@@ -1868,60 +1868,73 @@ export default function App() {
       }
       try {
         const savedToken = token || sessionStorage.getItem('ghadir_token');
-        const res = await fetch(`${API_URL}/api/initial-data`, {
-          headers: {
-            ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-          }
-        });
-        const data = await res.json();
-        
-        // Double check right before setting the state in case a write happened while the fetch was in flight
-        if (Date.now() - lastLocalWriteRef.current < 8000 || pendingSyncsRef.current > 0) {
-          return;
-        }
-
-        const migrateItem = (item) => {
-          let email = item.email || "";
-          let password = item.password || "";
-          let changed = false;
-          if (email.includes("royals") || email.includes("royal")) {
-            email = email.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/@royals\.sa/g, "@ghadirsports.sa").replace(/@royalsports\.sa/g, "@ghadirsports.sa").replace(/@royal\.sa/g, "@ghadirsports.sa");
-            changed = true;
-          }
-          if (password.includes("royals") || password.includes("Royals") || password.includes("Royal") || password.includes("royal")) {
-            password = password.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/Royals@/g, "Ghadir@").replace(/Royal@/g, "Ghadir@");
-            changed = true;
-          }
-          return changed ? { ...item, email, password } : item;
-        };
-
-        if (data.players) {
-          // Auto-repair missing logins/data for display
-          const repaired = data.players.map(p => {
-            const migrated = migrateItem(p);
-            if (migrated.email && migrated.password) return migrated;
-            const phone = migrated.phone || "0500000000";
-            return { 
-              ...migrated, 
-              email: migrated.email || `ghadir_${phone}@ghadirsports.sa`,
-              password: migrated.password || `ghadir_${phone.slice(-4)}`
-            };
+        const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+        let res = null;
+        try {
+          res = await fetch(`${targetUrl}/api/initial-data`, {
+            headers: {
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            }
           });
-          setPlayers(repaired);
+        } catch (err) {
+          res = await fetch(`/api/initial-data`, {
+            headers: {
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            }
+          });
         }
-        if (data.coaches) setCoaches(data.coaches.map(migrateItem));
-        if (data.groups) {
-          const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-          setGroups(cleanGroups);
+
+        if (res && res.ok) {
+          const data = await res.json();
+          
+          // Double check right before setting the state in case a write happened while the fetch was in flight
+          if (Date.now() - lastLocalWriteRef.current < 8000 || pendingSyncsRef.current > 0) {
+            return;
+          }
+
+          const migrateItem = (item) => {
+            let email = item.email || "";
+            let password = item.password || "";
+            let changed = false;
+            if (email.includes("royals") || email.includes("royal")) {
+              email = email.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/@royals\.sa/g, "@ghadirsports.sa").replace(/@royalsports\.sa/g, "@ghadirsports.sa").replace(/@royal\.sa/g, "@ghadirsports.sa");
+              changed = true;
+            }
+            if (password.includes("royals") || password.includes("Royals") || password.includes("Royal") || password.includes("royal")) {
+              password = password.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/Royals@/g, "Ghadir@").replace(/Royal@/g, "Ghadir@");
+              changed = true;
+            }
+            return changed ? { ...item, email, password } : item;
+          };
+
+          if (data.players && Array.isArray(data.players)) {
+            // Auto-repair missing logins/data for display
+            const repaired = data.players.map(p => {
+              const migrated = migrateItem(p);
+              if (migrated.email && migrated.password) return migrated;
+              const phone = migrated.phone || "0500000000";
+              return { 
+                ...migrated, 
+                email: migrated.email || `ghadir_${phone}@ghadirsports.sa`,
+                password: migrated.password || `ghadir_${phone.slice(-4)}`
+              };
+            });
+            setPlayers(repaired);
+          }
+          if (data.coaches) setCoaches(data.coaches.map(migrateItem));
+          if (data.groups) {
+            const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
+            setGroups(cleanGroups);
+          }
+          if (data.payments) setPayments(data.payments);
+          if (data.attendance) setAttendance(data.attendance);
+          if (data.coachesAttendance) setCoachesAttendance(data.coachesAttendance);
+          if (data.evals) setEvals(data.evals);
+          if (data.messages) setMessages(data.messages);
+          if (data.trainings) setTrainings(data.trainings);
+          if (data.parents) setParents(data.parents.map(migrateItem));
+          setSyncStatus("synced");
         }
-        if (data.payments) setPayments(data.payments);
-        if (data.attendance) setAttendance(data.attendance);
-        if (data.coachesAttendance) setCoachesAttendance(data.coachesAttendance);
-        if (data.evals) setEvals(data.evals);
-        if (data.messages) setMessages(data.messages);
-        if (data.trainings) setTrainings(data.trainings);
-        if (data.parents) setParents(data.parents.map(migrateItem));
-        setSyncStatus("synced");
       } catch (e) {
         console.error("API Fetch Error:", e);
       }
@@ -6652,7 +6665,8 @@ function ParentPortal({ user, onLogout, players, groups, coaches, parents, payme
     if (user.userId && String(p.parentId) === String(user.userId)) return true;
     if (user.id && String(p.userId) === String(user.id)) return true;
     if (user.email && p.email && p.email.toLowerCase() === user.email.toLowerCase()) return true;
-    if (userPhone && p.phone && (p.phone === userPhone || userPhone.includes(p.phone) || p.phone.includes(userPhone))) return true;
+    if (userPhone && p.phone && (String(p.phone).includes(userPhone) || userPhone.includes(String(p.phone)))) return true;
+    if (players.length === 1) return true;
     return false;
   });
   

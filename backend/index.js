@@ -564,18 +564,45 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
 });
 
 // --- Specific Update Routes ---
+// --- REST Player Endpoints ---
+
+// GET /api/players
+app.get('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  try {
+    const playersRaw = await prisma.player.findMany({
+      include: {
+        parent: { include: { user: true } },
+        group: true
+      },
+      orderBy: { joinDate: 'desc' }
+    });
+
+    const players = playersRaw.map(p => {
+      const { parent: parentRel, ...pClean } = p;
+      return {
+        ...pClean,
+        email: parentRel?.user?.email || '',
+        parentPhone: parentRel?.user?.phone || p.phone || ''
+      };
+    });
+
+    res.json(players);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/players — CREATE ONLY
 app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
   const p = req.body;
   try {
     let resolvedParentId = p.parentId;
 
-    // Check if the incoming parentId already exists in the Parent table
     const existingParent = p.parentId
       ? await prisma.parent.findUnique({ where: { id: p.parentId } })
       : null;
 
     if (!existingParent) {
-      // Parent doesn't exist yet — create User + Parent from player's email/phone
       const email = p.email || `ghadir_${p.phone || Date.now()}@ghadirsports.sa`;
       const password = p.password || `ghadir_${(p.phone || '0000').slice(-4)}`;
       const hashedPassword = bcrypt.hashSync(password, 10);
@@ -595,46 +622,21 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
       });
 
       resolvedParentId = parent.id;
-    } else {
-      // Parent exists — update User details if provided
-      const updateData = {};
-      if (p.email) updateData.email = p.email;
-      if (p.password) {
-        const isBcrypt = p.password.startsWith('$2a$') || p.password.startsWith('$2b$');
-        updateData.password = isBcrypt 
-          ? p.password 
-          : bcrypt.hashSync(p.password, 10);
-        if (!isBcrypt) {
-          updateData.encryptedPassword = encryptPassword(p.password);
-        }
-      }
-      updateData.name = `ولي أمر ${p.name}`;
-
-      await prisma.user.update({
-        where: { id: existingParent.userId },
-        data: updateData
-      });
     }
 
-    // Parse numbers safely to prevent Prisma constraint violations
     const resolvedAge = (p.age && !isNaN(p.age) && +p.age > 0) ? parseInt(p.age) : 10;
     const resolvedWeight = (p.weight && !isNaN(p.weight)) ? parseFloat(p.weight) : null;
     const resolvedHeight = (p.height && !isNaN(p.height)) ? parseFloat(p.height) : null;
 
-    // Validate that nationalId is unique
     if (p.nationalId && p.nationalId.trim()) {
       const duplicate = await prisma.player.findFirst({
-        where: {
-          nationalId: p.nationalId.trim(),
-          NOT: p.id ? { id: p.id } : undefined
-        }
+        where: { nationalId: p.nationalId.trim() }
       });
       if (duplicate) {
-        return res.status(400).json({ error: 'اللاعب مسجل مسبقاً برقم الهوية هذا' });
+        return res.status(409).json({ error: 'اللاعب مسجل مسبقاً برقم الهوية هذا' });
       }
     }
 
-    // Create or update the Player record
     let validGroupId = p.groupId;
     if (validGroupId === 'g-football' || validGroupId === 'كرة القدم') {
       validGroupId = (resolvedAge <= 10) ? 'g-football-juniors' : 'g-football-seniors';
@@ -672,50 +674,88 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
     const safeFreezeRanges = (p.freezeRanges && typeof p.freezeRanges === 'object') ? JSON.stringify(p.freezeRanges) : (p.freezeRanges || null);
     const safeTrainingDays = (p.trainingDays && typeof p.trainingDays === 'object') ? JSON.stringify(p.trainingDays) : (p.trainingDays || null);
 
-    let player;
-    const existing = p.id ? await prisma.player.findUnique({ where: { id: p.id } }) : null;
+    // Create ONLY using Prisma auto CUID — do not accept client ID
+    const player = await prisma.player.create({
+      data: {
+        name: p.name, phone: p.phone, age: resolvedAge,
+        status: p.status || 'نشط', position: p.position,
+        weight: resolvedWeight,
+        height: resolvedHeight,
+        score: p.score ? +p.score : 80,
+        joinDate: parseSafeDate(p.joinDate),
+        bus: p.bus,
+        nationalId: p.nationalId ? p.nationalId.trim() : null,
+        freezeRanges: safeFreezeRanges,
+        trainingDays: safeTrainingDays,
+        group: validGroupId ? { connect: { id: validGroupId } } : undefined,
+        parent: { connect: { id: resolvedParentId } }
+      }
+    });
 
-    if (existing) {
-      player = await prisma.player.update({
-        where: { id: p.id },
-        data: {
-          name: p.name, phone: p.phone, age: resolvedAge,
-          status: p.status, position: p.position,
-          weight: resolvedWeight,
-          height: resolvedHeight,
-          score: p.score ? +p.score : null,
-          joinDate: parseSafeDate(p.joinDate),
-          bus: p.bus,
-          nationalId: p.nationalId ? p.nationalId.trim() : null,
-          freezeRanges: safeFreezeRanges,
-          trainingDays: safeTrainingDays,
-          group: validGroupId ? { connect: { id: validGroupId } } : undefined,
-          parent: { connect: { id: resolvedParentId } }
-        }
-      });
-    } else {
-      player = await prisma.player.create({
-        data: {
-          ...(p.id ? { id: p.id } : {}),
-          name: p.name, phone: p.phone, age: resolvedAge,
-          status: p.status || 'نشط', position: p.position,
-          weight: resolvedWeight,
-          height: resolvedHeight,
-          score: p.score ? +p.score : 80,
-          joinDate: parseSafeDate(p.joinDate),
-          bus: p.bus,
-          nationalId: p.nationalId ? p.nationalId.trim() : null,
-          freezeRanges: safeFreezeRanges,
-          trainingDays: safeTrainingDays,
-          group: validGroupId ? { connect: { id: validGroupId } } : undefined,
-          parent: { connect: { id: resolvedParentId } }
-        }
-      });
+    res.status(201).json({ ...player, parentId: resolvedParentId });
+  } catch (e) {
+    console.error('Player create error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/players/:id — UPDATE ONLY
+app.put('/api/players/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  const p = req.body;
+  try {
+    const existing = await prisma.player.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'اللاعب غير موجود' });
     }
 
-    res.json({ ...player, parentId: resolvedParentId });
+    const resolvedAge = (p.age && !isNaN(p.age) && +p.age > 0) ? parseInt(p.age) : existing.age;
+    const resolvedWeight = (p.weight !== undefined && !isNaN(p.weight)) ? parseFloat(p.weight) : existing.weight;
+    const resolvedHeight = (p.height !== undefined && !isNaN(p.height)) ? parseFloat(p.height) : existing.height;
+
+    const safeFreezeRanges = (p.freezeRanges && typeof p.freezeRanges === 'object') ? JSON.stringify(p.freezeRanges) : (p.freezeRanges || existing.freezeRanges);
+    const safeTrainingDays = (p.trainingDays && typeof p.trainingDays === 'object') ? JSON.stringify(p.trainingDays) : (p.trainingDays || existing.trainingDays);
+
+    const updatedPlayer = await prisma.player.update({
+      where: { id },
+      data: {
+        name: p.name !== undefined ? p.name : existing.name,
+        phone: p.phone !== undefined ? p.phone : existing.phone,
+        age: resolvedAge,
+        status: p.status !== undefined ? p.status : existing.status,
+        position: p.position !== undefined ? p.position : existing.position,
+        weight: resolvedWeight,
+        height: resolvedHeight,
+        score: p.score !== undefined ? +p.score : existing.score,
+        joinDate: p.joinDate ? parseSafeDate(p.joinDate) : existing.joinDate,
+        bus: p.bus !== undefined ? p.bus : existing.bus,
+        nationalId: p.nationalId !== undefined ? (p.nationalId ? p.nationalId.trim() : null) : existing.nationalId,
+        freezeRanges: safeFreezeRanges,
+        trainingDays: safeTrainingDays,
+        groupId: p.groupId !== undefined ? p.groupId : existing.groupId
+      }
+    });
+
+    res.json(updatedPlayer);
   } catch (e) {
-    console.error('Player error:', e);
+    console.error('Player update error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/players/:id — DELETE ONLY
+app.delete('/api/players/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await prisma.player.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'اللاعب غير موجود' });
+    }
+
+    await prisma.player.delete({ where: { id } });
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('Player delete error:', e);
     res.status(500).json({ error: e.message });
   }
 });

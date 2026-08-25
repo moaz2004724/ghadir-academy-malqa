@@ -1908,6 +1908,7 @@ export default function App() {
 
   const shared = { 
     syncStatus,
+    loadInitialData,
     groups, 
     setGroups: (val) => {
       if (typeof val === 'function') {
@@ -2210,7 +2211,7 @@ export default function App() {
 /* ══════════════════════════════════════════════════════════
    ADMIN PORTAL
 ══════════════════════════════════════════════════════════ */
-function AdminPortal({ user, onLogout, groups, setGroups, coaches, setCoaches, players, setPlayers, parents, payments, setPayments, attendance, setAttendance, coachesAttendance, setCoachesAttendance, evals, messages, setMessages, prices, setPrices, trainings, setTrainings, t, syncStatus }) {
+function AdminPortal({ user, onLogout, groups, setGroups, coaches, setCoaches, players, setPlayers, parents, payments, setPayments, attendance, setAttendance, coachesAttendance, setCoachesAttendance, evals, messages, setMessages, prices, setPrices, trainings, setTrainings, t, syncStatus, loadInitialData }) {
   const [tab, setTab] = useState(() => {
     return sessionStorage.getItem("ghadir_admin_active_tab") || "overview";
   });

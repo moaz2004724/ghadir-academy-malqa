@@ -12,6 +12,11 @@ const API_URL = (typeof import.meta !== 'undefined' && import.meta.env && import
     : "https://ghadir-academy-malqa-production.up.railway.app"
 );
 
+export function getAuthToken() {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token') || "";
+}
+
 function PasswordReveal({ userId, email, fallbackPassword, t }) {
   const [revealed, setRevealed] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1792,66 +1797,9 @@ export default function App() {
   }, [user, token]);
 
   // Self-healing migration for legacy local data strings
-  useEffect(() => {
-    const migrateItem = (item) => {
-      let email = item.email || "";
-      let password = item.password || "";
-      let changed = false;
-      if (email.includes("royals") || email.includes("royal")) {
-        email = email.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/@royals\.sa/g, "@ghadirsports.sa").replace(/@royalsports\.sa/g, "@ghadirsports.sa").replace(/@royal\.sa/g, "@ghadirsports.sa").replace(/@royal-club\.sa/g, "@ghadirsports.sa");
-        changed = true;
-      }
-      if (password.includes("royals") || password.includes("Royals") || password.includes("Royal") || password.includes("royal")) {
-        password = password.replace(/royals_/g, "ghadir_").replace(/royal_/g, "ghadir_").replace(/Royals@/g, "Ghadir@").replace(/Royal@/g, "Ghadir@");
-        changed = true;
-      }
-      return changed ? { ...item, email, password } : item;
-    };
 
-    setPlayers(prev => {
-      let changed = false;
-      const next = prev.map(p => {
-        const item = migrateItem(p);
-        if (item.groupId === "g-football" || item.groupId === "كرة القدم") {
-          changed = true;
-          return { ...item, groupId: (item.age && item.age <= 10) ? "g-football-juniors" : "g-football-seniors" };
-        }
-        if (item.groupId === "g-swimming" || item.groupId === "السباحة") {
-          changed = true;
-          return { ...item, groupId: "g-swimming-boys" };
-        }
-        return item;
-      });
-      return JSON.stringify(prev) !== JSON.stringify(next) || changed ? next : prev;
-    });
-    setCoaches(prev => {
-      const next = prev.map(migrateItem);
-      return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
-    });
-    setParents(prev => {
-      const next = prev.map(migrateItem);
-      return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
-    });
-    setGroups(prev => {
-      const filtered = prev.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-      const next = [...filtered];
-      DEFAULT_SPORTS.forEach(ds => {
-        if (!next.some(x => x.id === ds.id || x.name === ds.name)) {
-          next.push(ds);
-        }
-      });
-      return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
-    });
-    setTrainings(prev => {
-      const next = [...prev];
-      DEFAULT_TRAININGS.forEach(dt => {
-        if (!next.some(x => x.id === dt.id || x.groupId === dt.groupId)) {
-          next.push(dt);
-        }
-      });
-      return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
-    });
-  }, []);
+
+
 
   // Prevent closing window if data is still syncing
   useEffect(() => {

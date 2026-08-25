@@ -1840,16 +1840,18 @@ export default function App() {
         const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
         let res = null;
         console.log("[API ORDER] REQUEST START: GET /api/initial-data");
-        try {
-          res = await fetch(`${targetUrl}/api/initial-data`, {
-            headers: { 'Authorization': `Bearer ${savedToken}` }
-          });
-        } catch (err) {
+        
+        // Try relative endpoint first to use Vercel proxy rewrite, fallback to direct Railway URL
+        const fetchUrls = ['/api/initial-data', `${targetUrl}/api/initial-data`];
+        for (const u of fetchUrls) {
           try {
-            res = await fetch(`/api/initial-data`, {
+            res = await fetch(u, {
               headers: { 'Authorization': `Bearer ${savedToken}` }
             });
-          } catch (err2) {}
+            if (res && res.ok) break;
+          } catch (err) {
+            console.warn(`Fetch failed for ${u}:`, err.message);
+          }
         }
 
         console.log("[INITIAL DATA] status:", res ? res.status : "NO_RES");
@@ -1917,11 +1919,21 @@ export default function App() {
           localStorage.removeItem('ghadir_logged_user');
           localStorage.removeItem('ghadir_token');
           sessionStorage.removeItem('ghadir_token');
+        } else if (isInitial) {
+          // If initial fetch failed due to cold start / network issue, retry once after 1s
+          console.warn("Initial fetch returned non-ok status, retrying in 1s...");
+          setTimeout(() => fetchData(true), 1000);
+          return;
         }
       } catch (e) {
         console.error("API Fetch Error:", e);
-      } finally {
         if (isInitial) {
+          console.warn("Initial fetch error, retrying in 1s...");
+          setTimeout(() => fetchData(true), 1000);
+          return;
+        }
+      } finally {
+        if (isInitial && isFirstFetchRef.current === false) {
           setIsAppLoading(false);
         }
       }
@@ -3516,6 +3528,15 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
 
   console.log("[PLAYERS DEBUG 3]", { fg, playersCount: players?.length, filteredCount: filtered?.length, filteredSample: filtered?.slice(0, 3) });
   console.log("[PLAYERS DEBUG 4]", { renderingPlayers: true, visibleCount: filtered?.length });
+  console.log("[ACTUAL PLAYERS VIEW]", {
+    component: "AdminPlayers",
+    players: players?.length,
+    filtered: filtered?.length,
+    visible: filtered?.length,
+    page: 1,
+    pageItems: filtered?.length,
+    emptyState: filtered?.length === 0
+  });
 
   useEffect(() => {
     if (selectedPlayerId) {

@@ -2186,11 +2186,11 @@ export default function App() {
 
       {!user
         ? <LoginPage onLogin={(u, tok) => { setUser(u); if (tok) setToken(tok); }} players={players} coaches={coaches} t={t} />
-        : user.role === "admin"
-          ? <AdminPortal  user={user} onLogout={() => setUser(null)} {...shared} />
-          : user.role === "coach"
-            ? <CoachPortal  user={user} onLogout={() => setUser(null)} {...shared} />
-            : <ParentPortal user={user} onLogout={() => setUser(null)} {...shared} loginUser={user} />
+        : (String(user.role).toLowerCase() === "admin" || String(user.role).toLowerCase() === "super_admin")
+          ? <AdminPortal  user={user} onLogout={() => { setUser(null); localStorage.removeItem('ghadir_logged_user'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
+          : (String(user.role).toLowerCase() === "coach")
+            ? <CoachPortal  user={user} onLogout={() => { setUser(null); localStorage.removeItem('ghadir_logged_user'); sessionStorage.removeItem('ghadir_token'); }} {...shared} />
+            : <ParentPortal user={user} onLogout={() => { setUser(null); localStorage.removeItem('ghadir_logged_user'); sessionStorage.removeItem('ghadir_token'); }} {...shared} loginUser={user} />
       }
     </div>
   );

@@ -4078,31 +4078,45 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
 
               const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
               const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-              fetch(`${targetUrl}/api/players`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-                },
-                body: JSON.stringify(payload)
-              })
-              .then(res => {
-                if (!res.ok) throw new Error("Failed to create player");
-                return res.json();
-              })
-              .then(() => {
-                if (typeof loadInitialData === 'function') {
-                  loadInitialData();
-                } else if (typeof setPlayers === 'function') {
-                  fetch(`${targetUrl}/api/players`, {
-                    headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
-                  }).then(r => r.json()).then(data => { if (Array.isArray(data)) setPlayers(data); });
+              const fetchUrls = ['/api/players', `${targetUrl}/api/players`];
+
+              (async () => {
+                let res = null;
+                for (const u of fetchUrls) {
+                  try {
+                    res = await fetch(u, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+                      },
+                      body: JSON.stringify(payload)
+                    });
+                    if (res && res.ok) break;
+                  } catch (err) {}
                 }
-                setModal(null);
-              })
-              .catch(err => {
-                alert("حدث خطأ أثناء إضافة اللاعب");
-              });
+
+                if (res && res.ok) {
+                  let freshData = null;
+                  for (const u of fetchUrls) {
+                    try {
+                      const r = await fetch(u, {
+                        headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
+                      });
+                      if (r && r.ok) {
+                        freshData = await r.json();
+                        break;
+                      }
+                    } catch (e) {}
+                  }
+                  if (Array.isArray(freshData)) {
+                    setPlayers(freshData);
+                  }
+                  setModal(null);
+                } else {
+                  alert("حدث خطأ أثناء إضافة اللاعب");
+                }
+              })();
             }} style={{ flex: 1 }}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="check" size={14} color="currentColor" /> إضافة وتوليد بيانات الدخول</span></Btn>
             <Btn variant="secondary" onClick={() => setModal(null)}>إلغاء</Btn>
           </div>

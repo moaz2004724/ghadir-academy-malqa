@@ -48,7 +48,7 @@ function PasswordReveal({ userId, email, fallbackPassword, t }) {
 
     setLoading(true);
     try {
-      const savedToken = sessionStorage.getItem('ghadir_token');
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
       const res = await fetch(`${targetUrl}/api/reveal-password`, {
         method: 'POST',
@@ -2422,7 +2422,7 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
     };
 
     if (API_URL) {
-      const savedToken = sessionStorage.getItem('ghadir_token');
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       fetch(`${API_URL}/api/messages`, {
         method: 'POST',
         headers: { 
@@ -3632,7 +3632,7 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
       freezeRanges: JSON.stringify(ranges)
     };
 
-    const savedToken = sessionStorage.getItem('ghadir_token');
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
     fetch(`${API_URL}/api/players`, {
       method: "POST",
       headers: { 
@@ -5073,7 +5073,7 @@ function AdminPrices({ prices, setPrices, t, groups, setGroups }) {
 
     setIsResetting(true);
     try {
-      const savedToken = sessionStorage.getItem('ghadir_token');
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       const res = await fetch(`${API_URL}/api/reset-database`, {
         method: "POST",
         headers: { 
@@ -7649,7 +7649,7 @@ function Messaging({ messages, setMessages, meId, meName, coaches, parents, t, r
     });
 
     if (API_URL) {
-      const savedToken = sessionStorage.getItem('ghadir_token');
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       newMsgs.forEach(m => {
         fetch(`${API_URL}/api/messages`, {
           method: 'POST',
@@ -7687,7 +7687,7 @@ function Messaging({ messages, setMessages, meId, meName, coaches, parents, t, r
     };
 
     if (API_URL) {
-      const savedToken = sessionStorage.getItem('ghadir_token');
+      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       fetch(`${API_URL}/api/messages`, {
         method: 'POST',
         headers: { 

@@ -644,6 +644,20 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
         const firstGroup = await prisma.group.findFirst();
         validGroupId = firstGroup?.id;
       }
+      // Re-check or create group if DB has none
+      if (validGroupId) {
+        groupExists = await prisma.group.findUnique({ where: { id: validGroupId } });
+      }
+      if (!groupExists) {
+        const createdGroup = await prisma.group.create({
+          data: {
+            id: validGroupId || 'g-football-juniors',
+            name: 'كرة القدم - الصغار (5-10 سنوات)',
+            color: '#16A34A'
+          }
+        });
+        validGroupId = createdGroup.id;
+      }
     }
 
     const safeFreezeRanges = (p.freezeRanges && typeof p.freezeRanges === 'object') ? JSON.stringify(p.freezeRanges) : (p.freezeRanges || null);

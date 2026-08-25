@@ -2066,7 +2066,14 @@ export default function App() {
               return !old || JSON.stringify(old) !== JSON.stringify(n);
             });
             const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(i => syncWithAPI('players', i));
+            // Sync with server and update local state with server response
+            addedOrChanged.forEach(async (item) => {
+              const serverData = await syncWithAPI('players', item);
+              if (serverData && serverData.id && serverData.id !== item.id) {
+                // Server returned a different ID — update local state
+                setPlayers(ps => ps.map(p => p.id === item.id ? { ...p, ...serverData } : p));
+              }
+            });
             deleted.forEach(i => syncWithAPI('players', i, true));
           }
           return next;
@@ -2096,7 +2103,12 @@ export default function App() {
               return !old || JSON.stringify(old) !== JSON.stringify(n);
             });
             const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(i => syncWithAPI('payments', i));
+            addedOrChanged.forEach(async (item) => {
+              const serverData = await syncWithAPI('payments', item);
+              if (serverData && serverData.id && serverData.id !== item.id) {
+                setPayments(ps => ps.map(p => p.id === item.id ? { ...p, ...serverData } : p));
+              }
+            });
             deleted.forEach(i => syncWithAPI('payments', i, true));
           }
           return next;
@@ -3535,8 +3547,12 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
   const [fg, setFg] = useState("الكل");
   const emptyP = { name: "", age: "", groupId: groups[0]?.id || "", phone: "", position: "مهاجم", status: "نشط", score: 80, speed: 75, stamina: 75, technique: 75, teamwork: 75, goals: 0, assists: 0, attendancePct: 90, weight: "", height: "", parentId: "__new__", email: "", password: "", bus: "" };
   const [form, setForm] = useState(emptyP);
-  const filtered = players.filter(p => {
-    const matchesSearch = p.name.includes(search) || (groups.find(g => g.id === p.groupId)?.name || "").includes(search);
+  const filtered = (players || []).filter(p => {
+    if (!p) return false;
+    const cleanSearch = (search || "").trim().toLowerCase();
+    const pName = (p.name || "").toLowerCase();
+    const gName = (groups.find(g => g.id === p.groupId)?.name || "").toLowerCase();
+    const matchesSearch = !cleanSearch || pName.includes(cleanSearch) || gName.includes(cleanSearch);
     const matchesGroup = fg === "الكل" || p.groupId === fg;
     return matchesSearch && matchesGroup;
   });

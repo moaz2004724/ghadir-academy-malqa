@@ -636,30 +636,37 @@ app.post('/api/players', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']
 
     // Create or update the Player record
     let validGroupId = p.groupId;
-    let groupExists = validGroupId ? await prisma.group.findUnique({ where: { id: validGroupId } }) : null;
-    if (!groupExists) {
-      if (validGroupId === 'g-football' || validGroupId === 'كرة القدم') {
-        validGroupId = (resolvedAge <= 10) ? 'g-football-juniors' : 'g-football-seniors';
-      } else if (validGroupId === 'g-swimming' || validGroupId === 'السباحة') {
-        validGroupId = 'g-swimming-boys';
-      } else {
-        const firstGroup = await prisma.group.findFirst();
-        validGroupId = firstGroup?.id;
-      }
-      // Re-check or create group if DB has none
-      if (validGroupId) {
-        groupExists = await prisma.group.findUnique({ where: { id: validGroupId } });
-      }
-      if (!groupExists) {
-        const createdGroup = await prisma.group.create({
-          data: {
-            id: validGroupId || 'g-football-juniors',
-            name: 'كرة القدم - الصغار (5-10 سنوات)',
-            color: '#16A34A'
-          }
-        });
-        validGroupId = createdGroup.id;
-      }
+    if (validGroupId === 'g-football' || validGroupId === 'كرة القدم') {
+      validGroupId = (resolvedAge <= 10) ? 'g-football-juniors' : 'g-football-seniors';
+    } else if (validGroupId === 'g-swimming' || validGroupId === 'السباحة') {
+      validGroupId = 'g-swimming-boys';
+    }
+
+    const defaultSportsMap = {
+      'g-football-juniors': { name: 'كرة القدم - الصغار (5-10 سنوات)', color: '#16A34A' },
+      'g-football-seniors': { name: 'كرة القدم - الكبار (11-16 سنة)', color: '#15803D' },
+      'g-swimming-boys': { name: 'المسبح - بنين', color: '#0284C7' },
+      'g-swimming-girls': { name: 'المسبح - بنات', color: '#0369A1' },
+      'g-gymnastics': { name: 'الجمباز', color: '#9333EA' },
+      'g-karate': { name: 'الكاراتيه (بنين - بنات)', color: '#DC2626' },
+      'g-basketball': { name: 'كرة السلة', color: '#EA580C' },
+      'g-boxing': { name: 'البوكسينج (بنين - بنات)', color: '#4B5563' }
+    };
+
+    if (validGroupId) {
+      const sportMeta = defaultSportsMap[validGroupId] || { name: p.groupName || validGroupId, color: '#2563EB' };
+      await prisma.group.upsert({
+        where: { id: validGroupId },
+        update: {},
+        create: {
+          id: validGroupId,
+          name: sportMeta.name,
+          color: sportMeta.color
+        }
+      });
+    } else {
+      const firstGroup = await prisma.group.findFirst();
+      validGroupId = firstGroup?.id || 'g-football-juniors';
     }
 
     const safeFreezeRanges = (p.freezeRanges && typeof p.freezeRanges === 'object') ? JSON.stringify(p.freezeRanges) : (p.freezeRanges || null);

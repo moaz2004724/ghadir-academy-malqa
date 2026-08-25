@@ -1823,7 +1823,7 @@ export default function App() {
       // On first fetch after login, ALWAYS fetch (bypass write lock)
       // On subsequent background polls, skip if actively syncing
       if (!isInitial && !isFirstFetchRef.current) {
-        if (pendingSyncsRef.current > 0 || Date.now() - lastLocalWriteRef.current < 3000) {
+        if (pendingSyncsRef.current > 0 || Date.now() - lastLocalWriteRef.current < 15000) {
           return;
         }
       }

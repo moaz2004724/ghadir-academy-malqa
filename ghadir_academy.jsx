@@ -3101,8 +3101,8 @@ function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t, loadIn
       setTimeout(() => setSelGroup(null), 0);
       return <div style={{ padding: 40, textAlign: "center", color: t.textDim }}>جاري تحميل بيانات النشاط...</div>;
     }
-    const coach = coaches.find(c => c.id === g?.coachId);
-    const gPlayers = players.filter(p => p.groupId === selGroup);
+    const coach = (coaches || []).find(c => c.id === g?.coachId);
+    const gPlayers = (players || []).filter(p => p.groupId === selGroup);
     return (
       <div>
         <button onClick={() => setSelGroup(null)} style={{ background: `${t.bg2}`, border: `1px solid ${t.border}`, color: t.textDim, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 18, fontFamily: "'Cairo',sans-serif" }}>← رجوع للأنشطة والرياضات</button>
@@ -3214,9 +3214,9 @@ function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t, loadIn
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 18 }}>
-        {groups.filter(g => g && g.id !== "g-football" && g.name !== "كرة القدم" && g.id !== "g-swimming" && g.name !== "السباحة").map(g => {
-          const coach = coaches.find(c => c.id === g.coachId);
-          const gPlayers = players.filter(p => p.groupId === g.id);
+        {(groups || []).filter(g => g && g.id !== "g-football" && g.name !== "كرة القدم" && g.id !== "g-swimming" && g.name !== "السباحة").map(g => {
+          const coach = (coaches || []).find(c => c.id === g.coachId);
+          const gPlayers = (players || []).filter(p => p.groupId === g.id);
           const avgScore = gPlayers.length ? Math.round(gPlayers.reduce((a, p) => a + p.score, 0) / gPlayers.length) : 0;
           return (
             <Card key={g.id} hover t={t} style={{ padding: 0, overflow: "hidden", cursor: "pointer", borderTop: `3px solid ${g.color}` }} onClick={() => setSelGroup(g.id)}>
@@ -3406,15 +3406,15 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
   };
 
   if (sel) {
-    const c = coaches.find(x => x.id === sel);
+    const c = (coaches || []).find(x => x.id === sel);
     if (!c) { 
       setTimeout(() => setSel(null), 0);
       return <div style={{ padding: 40, textAlign: "center", color: t.textDim }}>جاري تحميل بيانات المدرب...</div>;
     }
-    const g = groups.find(x => x.id === c.groupId);
-    const cPays = payments.filter(p => p.coachId === c.id);
+    const g = (groups || []).find(x => x.id === c.groupId);
+    const cPays = (payments || []).filter(p => p.coachId === c.id);
     const rev = cPays.reduce((a, p) => a + p.amount - (p.discount || 0), 0);
-    const cPlayers = players.filter(p => p.groupId === c.groupId);
+    const cPlayers = (players || []).filter(p => p.groupId === c.groupId);
     const perms = c.perms || { ...DEFAULT_PERMS };
 
     return (
@@ -3530,9 +3530,9 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
         </Btn>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 14 }}>
-        {coaches.map(c => {
-          const g   = groups.find(x => x.id === c.groupId);
-          const rev = payments.filter(p => p.coachId === c.id).reduce((a, p) => a + p.amount - (p.discount || 0), 0);
+        {(coaches || []).map(c => {
+          const g   = (groups || []).find(x => x.id === c.groupId);
+          const rev = (payments || []).filter(p => p.coachId === c.id).reduce((a, p) => a + p.amount - (p.discount || 0), 0);
           const perms = c.perms || { ...DEFAULT_PERMS };
           const enabledCount = Object.values(perms).filter(Boolean).length;
           return (
@@ -6170,12 +6170,29 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
   );
 }
 
-function CoachPortal({ user, onLogout, groups, coaches, players, parents, payments, setPayments, attendance, setAttendance, coachesAttendance, setCoachesAttendance, evals, setEvals, messages, setMessages, prices, trainings, setTrainings, t, syncStatus }) {
-  const coach = coaches.find(c => c.id === user.id) || coaches[0];
+function CoachPortal({ user, onLogout, groups = [], coaches = [], players = [], parents = [], payments = [], setPayments, attendance = [], setAttendance, coachesAttendance = [], setCoachesAttendance, evals = [], setEvals, messages = [], setMessages, prices = [], trainings = [], setTrainings, t, syncStatus }) {
+  const safeCoaches = coaches || [];
+  const safeGroups = groups || [];
+  const safePlayers = players || [];
+  const safeMessages = messages || [];
+  const safeAttendance = attendance || [];
+  const safeEvals = evals || [];
+  const safePayments = payments || [];
+  const safeTrainings = trainings || [];
+  const safeParents = parents || [];
+  const safePrices = prices || [];
+
+  const coach = safeCoaches.find(c => String(c.id) === String(user?.id) || String(c.id) === String(user?.coachId))
+             || safeCoaches.find(c => String(c.userId) === String(user?.id) || String(c.userId) === String(user?.userId))
+             || safeCoaches.find(c => user?.email && c.email && c.email.trim().toLowerCase() === user.email.trim().toLowerCase())
+             || safeCoaches.find(c => user?.phone && c.phone && String(c.phone).trim() === String(user.phone).trim())
+             || safeCoaches.find(c => user?.name && c.name && c.name.trim() === user.name.trim())
+             || { id: user?.coachId || user?.id || "", name: user?.name || "مدرب", groupId: user?.groupId || "", perms: user?.perms || DEFAULT_PERMS };
+
   const perms = coach?.perms || { ...DEFAULT_PERMS };
-  const group = groups.find(g => g.id === coach.groupId);
-  const myPlayers = players.filter(p => p.groupId === coach.groupId);
-  const unread = messages.filter(m => m.to === user.id && !m.read).length;
+  const group = safeGroups.find(g => g.id === coach?.groupId);
+  const myPlayers = coach?.groupId ? safePlayers.filter(p => p.groupId === coach.groupId) : safePlayers;
+  const unread = safeMessages.filter(m => m.to === user?.id && !m.read).length;
 
   const allTabs = [
     { id: "home",       icon: "dashboard",  label: "الرئيسية",       perm: null },
@@ -6194,26 +6211,32 @@ function CoachPortal({ user, onLogout, groups, coaches, players, parents, paymen
   }, [perms]);
 
   return (
-    <Shell title={coach.name} subtitle={`أكاديمية غدير الرياضية - فرع الملقا · مدرب ${group?.name || ""}`} color="#06B6D4" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge={group?.name} user={user} t={t} syncStatus={syncStatus}>
-      {tab === "home"       && <CoachHome coach={coach} group={group} groups={groups} myPlayers={myPlayers} attendance={attendance} evals={evals} trainings={trainings} t={t}/>}
-      {tab === "sessions"   && <CoachSessions coach={coach} group={group} groups={groups} trainings={trainings} t={t}/>}
-      {tab === "players"    && <CoachPlayers myPlayers={myPlayers} group={group} evals={evals} t={t} trainings={trainings} attendance={attendance} payments={payments}/>}
-      {tab === "attendance" && perms.attendance !== false && <CoachAttendance coachId={user.id} group={group} myPlayers={myPlayers} attendance={attendance} setAttendance={setAttendance} t={t} payments={payments} trainings={trainings}/>}
-      {tab === "eval"       && perms.evals !== false      && <CoachEval coachId={user.id} myPlayers={myPlayers} evals={evals} setEvals={setEvals} t={t}/>}
-      {tab === "payments"   && perms.payments !== false   && <CoachPayments coachId={user.id} myPlayers={myPlayers} payments={payments} setPayments={setPayments} prices={prices} coaches={coaches} t={t} groups={groups}/>}
-      {tab === "messages"   && perms.messages !== false   && <Messaging messages={messages} setMessages={setMessages} meId={user.id} meName={coach.name} coaches={coaches} parents={parents} t={t} role="coach" myGroupId={coach.groupId} players={players} />}
+    <Shell title={coach?.name || "بوابة المدرب"} subtitle={`أكاديمية غدير الرياضية - فرع الملقا · مدرب ${group?.name || ""}`} color="#06B6D4" tabs={tabs} activeTab={tab} setActiveTab={setTab} onLogout={onLogout} badge={group?.name} user={user} t={t} syncStatus={syncStatus}>
+      {tab === "home"       && <CoachHome coach={coach} group={group} groups={safeGroups} myPlayers={myPlayers} attendance={safeAttendance} evals={safeEvals} trainings={safeTrainings} t={t}/>}
+      {tab === "sessions"   && <CoachSessions coach={coach} group={group} groups={safeGroups} trainings={safeTrainings} t={t}/>}
+      {tab === "players"    && <CoachPlayers myPlayers={myPlayers} group={group} evals={safeEvals} t={t} trainings={safeTrainings} attendance={safeAttendance} payments={safePayments}/>}
+      {tab === "attendance" && perms.attendance !== false && <CoachAttendance coachId={user?.id} group={group} myPlayers={myPlayers} attendance={safeAttendance} setAttendance={setAttendance} t={t} payments={safePayments} trainings={safeTrainings}/>}
+      {tab === "eval"       && perms.evals !== false      && <CoachEval coachId={user?.id} myPlayers={myPlayers} evals={safeEvals} setEvals={setEvals} t={t}/>}
+      {tab === "payments"   && perms.payments !== false   && <CoachPayments coachId={user?.id} myPlayers={myPlayers} payments={safePayments} setPayments={setPayments} prices={safePrices} coaches={safeCoaches} t={t} groups={safeGroups}/>}
+      {tab === "messages"   && perms.messages !== false   && <Messaging messages={safeMessages} setMessages={setMessages} meId={user?.id} meName={coach?.name || "مدرب"} coaches={safeCoaches} parents={safeParents} t={t} role="coach" myGroupId={coach?.groupId} players={safePlayers} />}
     </Shell>
   );
 }
 
-function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainings, t }) {
-  const lastAtt = attendance.filter(a => a.coachId === coach.id).slice(-1)[0];
-  const avgScore = myPlayers.length ? Math.round(myPlayers.reduce((a, p) => a + p.score, 0) / myPlayers.length) : 0;
-  const myTrainings = (trainings || []).filter(tr => tr.groupId === coach.groupId && isTrainingActive(tr));
+function CoachHome({ coach, group, groups = [], myPlayers = [], attendance = [], evals = [], trainings = [], t }) {
+  const safeCoach = coach || {};
+  const safeAttendance = attendance || [];
+  const safeEvals = evals || [];
+  const safeTrainings = trainings || [];
+  const safeMyPlayers = myPlayers || [];
+
+  const lastAtt = safeAttendance.filter(a => a.coachId === safeCoach.id).slice(-1)[0];
+  const avgScore = safeMyPlayers.length ? Math.round(safeMyPlayers.reduce((a, p) => a + (p.score || 0), 0) / safeMyPlayers.length) : 0;
+  const myTrainings = safeTrainings.filter(tr => tr.groupId === safeCoach.groupId && isTrainingActive(tr));
   const currentDayAr = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][new Date().getDay()];
 
   // Calculate group attendance rate
-  const groupAtts = attendance.filter(a => a.groupId === coach.groupId);
+  const groupAtts = safeAttendance.filter(a => a.groupId === safeCoach.groupId);
   let totalRecords = 0;
   let presentRecords = 0;
   groupAtts.forEach(a => {
@@ -6300,7 +6323,7 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
                 <span style={{ fontSize: 16 }}><AnimIcon type="users" size={16} /></span>
                 <span style={{ fontSize: 12, color: t.textDim, fontWeight: 700 }}>اللاعبون المسجلون</span>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 900, color: t.text }}>{myPlayers.length} لاعب</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: t.text }}>{safeMyPlayers.length} لاعب</span>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -6308,7 +6331,7 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
                 <span style={{ fontSize: 16 }}><AnimIcon type="clipboard" size={28} color="#2563EB" /></span>
                 <span style={{ fontSize: 12, color: t.textDim, fontWeight: 700 }}>جلسات حضور مسجلة</span>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 900, color: "#2563EB" }}>{attendance.filter(a => a.coachId === coach.id).length} جلسة</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: "#2563EB" }}>{safeAttendance.filter(a => a.coachId === safeCoach.id).length} جلسة</span>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -6316,7 +6339,7 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
                 <span style={{ fontSize: 16 }}>⭐</span>
                 <span style={{ fontSize: 12, color: t.textDim, fontWeight: 700 }}>تقييمات فنية منجزة</span>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 900, color: "#EF4444" }}>{evals.filter(e => e.coachId === coach.id).length} تقييم</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: "#EF4444" }}>{safeEvals.filter(e => e.coachId === safeCoach.id).length} تقييم</span>
             </div>
           </div>
         </Card>
@@ -6345,9 +6368,9 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 90% 20%, rgba(6,182,212,.05) 0%, transparent 50%)", pointerEvents: "none" }} />
           
           <div style={{ position: "relative", zIndex: 1 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: t.name === "dark" ? "#FFF" : "#083344", marginBottom: 6 }}>لوحة الإشراف الفني — كابتن {coach.name}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: t.name === "dark" ? "#FFF" : "#083344", marginBottom: 6 }}>لوحة الإشراف الفني — {safeCoach.name ? (safeCoach.name.startsWith("كابتن") || safeCoach.name.startsWith("الكابتن") ? safeCoach.name : `كابتن ${safeCoach.name}`) : "المدرب"}</h2>
             <p style={{ fontSize: 12, color: t.textMid, lineHeight: 1.6, margin: 0 }}>
-              المجموعة المسؤولة: <strong>{group?.name || "بدون مجموعة"}</strong> · إجمالي اللاعبين في الصفوف التدريبية: {myPlayers.length}
+              المجموعة المسؤولة: <strong>{group?.name || "بدون مجموعة"}</strong> · إجمالي اللاعبين في الصفوف التدريبية: {safeMyPlayers.length}
             </p>
           </div>
 
@@ -6442,8 +6465,8 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
             <div style={{ fontSize: 11, color: t.textDim, marginBottom: 14 }}>قائمة لاعبي المجموعة ونسبة الحضور السنوي وتقييم المهارات</div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", maxHeight: 300, paddingLeft: 4 }}>
-              {myPlayers.map((p, i) => {
-                const lastEval = evals.filter(e => e.playerId === p.id).slice(-1)[0];
+              {safeMyPlayers.map((p, i) => {
+                const lastEval = safeEvals.filter(e => e.playerId === p.id).slice(-1)[0];
                 return (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: `1px solid ${t.border}`, borderRadius: 12, background: t.inputBg }} className="rh">
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -6474,7 +6497,7 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
                   </div>
                 );
               })}
-              {myPlayers.length === 0 && (
+              {safeMyPlayers.length === 0 && (
                 <div style={{ textAlign: "center", color: t.textFaint, padding: 40, fontSize: 12 }}>
                   لا يوجد لاعبون مسجلون في مجموعتك حالياً.
                 </div>
@@ -6491,11 +6514,11 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
             <div style={{ fontSize: 11, color: t.textDim, marginBottom: 14 }}>سجل كشف التحضير لآخر حصة تدريبية للمجموعة</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", maxHeight: 300 }}>
-              {lastAtt ? (
+              {lastAtt && lastAtt.records ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ fontSize: 11, color: t.textDim, fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><AnimIcon type="calendar" size={11} /> تاريخ الجلسة الأخيرة: {formatArabicDate(lastAtt.date)}</div>
-                  {Object.entries(lastAtt.records).map(([pid, status]) => {
-                    const p = myPlayers.find(x => x.id === pid);
+                  {Object.entries(lastAtt.records || {}).map(([pid, status]) => {
+                    const p = safeMyPlayers.find(x => x.id === pid);
                     return (
                       <div key={pid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", border: `1px solid ${t.border}`, borderRadius: 10, background: t.inputBg }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: t.text }}>{p?.name || pid}</span>
@@ -6518,9 +6541,12 @@ function CoachHome({ coach, group, groups, myPlayers, attendance, evals, trainin
   );
 }
 /* ── Coach Sessions ─────────────────────────────────── */
-function CoachSessions({ coach, group, groups, trainings, t }) {
-  if (!group) return <div style={{ textAlign: "center", color: t.textFaint, padding: 60 }}>لا توجد مجموعة محددة</div>;
-  const myTrainings = trainings.filter(tr => tr.groupId === coach.groupId && isTrainingActive(tr));
+function CoachSessions({ coach, group, groups = [], trainings = [], t }) {
+  const safeGroups = groups || [];
+  const safeTrainings = trainings || [];
+  const safeCoach = coach || {};
+  if (!group) return <div style={{ textAlign: "center", color: t.textFaint, padding: 60 }}>لا توجد مجموعة محددة للمدرب حالياً</div>;
+  const myTrainings = safeTrainings.filter(tr => tr.groupId === safeCoach.groupId && isTrainingActive(tr));
   
   return (
     <div>
@@ -6538,7 +6564,7 @@ function CoachSessions({ coach, group, groups, trainings, t }) {
                   </div>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 800, color: "#06B6D4" }}>
-                      {tr.isRecurring ? tr.days.join(" · ") : (tr.date ? new Date(tr.date).toLocaleDateString("ar-EG", { day: 'numeric', month: 'short' }) : "مرة واحدة")}
+                      {tr.isRecurring ? (tr.days || []).join(" · ") : (tr.date ? new Date(tr.date).toLocaleDateString("ar-EG", { day: 'numeric', month: 'short' }) : "مرة واحدة")}
                     </div>
                     <div style={{ fontSize: 12, color: t.textDim }}>{tr.time} · {tr.duration} دق</div>
                   </div>
@@ -6567,7 +6593,7 @@ function CoachSessions({ coach, group, groups, trainings, t }) {
                 <div>
                   <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     {tr.isRecurring ? (
-                      tr.days.map(d => <Chip key={d} text={d} color={colors[i % 2]}/>)
+                      (tr.days || []).map(d => <Chip key={d} text={d} color={colors[i % 2]}/>)
                     ) : (
                       <Chip text={tr.date ? new Date(tr.date).toLocaleDateString("ar-EG", { weekday: 'long', day: 'numeric', month: 'long' }) : ""} color="#EF4444"/>
                     )}
@@ -6583,18 +6609,18 @@ function CoachSessions({ coach, group, groups, trainings, t }) {
       </Card>
       <Card t={t} style={{ padding: 22 }} className="s3">
         <div style={{ fontWeight: 700, fontSize: 13, color: t.text, marginBottom: 14 }}><AnimIcon type="clipboard" size={28} color="#2563EB" /> جدول كل المجموعات</div>
-        {groups.map(g => {
-          const gTr = trainings.filter(tr => tr.groupId === g.id);
+        {safeGroups.map(g => {
+          const gTr = safeTrainings.filter(tr => tr.groupId === g.id);
           return (
             <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: g.color, flexShrink: 0 }}/>
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 700, fontSize: 13, color: g.color }}>{g.name}</span>
                 <span style={{ fontSize: 11, color: t.textDim, marginRight: 10 }}>
-                  {gTr.length ? gTr.map(tr => `${tr.days.join(" · ")} (${tr.time})`).join(" | ") : "لا يوجد تمرين"}
+                  {gTr.length ? gTr.map(tr => `${(tr.days || []).join(" · ")} (${tr.time})`).join(" | ") : "لا يوجد تمرين"}
                 </span>
               </div>
-              {g.id === coach.groupId && <Chip text="مجموعتي" color="#06B6D4"/>}
+              {g.id === safeCoach.groupId && <Chip text="مجموعتي" color="#06B6D4"/>}
             </div>
           );
         })}
@@ -6604,17 +6630,29 @@ function CoachSessions({ coach, group, groups, trainings, t }) {
 }
 
 /* ── Coach Players ──────────────────────────────────── */
-function CoachPlayers({ myPlayers, group, evals, t, trainings, attendance, payments }) {
+function CoachPlayers({ myPlayers = [], group, evals = [], t, trainings = [], attendance = [], payments = [] }) {
   const [sel, setSel] = useState(null);
+  const safeMyPlayers = myPlayers || [];
+  const safeEvals = evals || [];
+  const safeTrainings = trainings || [];
+  const safeAttendance = attendance || [];
+  const safePayments = payments || [];
+
   if (sel) {
-    const p  = myPlayers.find(x => x.id === sel);
-    const pe = evals.filter(e => e.playerId === p.id).slice(-3);
-    const lastEval = evals.filter(e => e.playerId === p.id).slice(-1)[0];
-    const subDetails = getPlayerSubscriptionDetails(p, trainings, attendance, payments);
+    const p  = safeMyPlayers.find(x => x.id === sel);
+    if (!p) return (
+      <div style={{ padding: 20 }}>
+        <button onClick={() => setSel(null)} style={{ background: t.bg2, border: `1px solid ${t.border}`, color: t.textDim, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 18, fontFamily: "'Cairo',sans-serif" }}>← رجوع</button>
+        <div style={{ textAlign: "center", color: t.textFaint, padding: 40 }}>لم يتم العثور على اللاعب.</div>
+      </div>
+    );
+    const pe = safeEvals.filter(e => e.playerId === p.id).slice(-3);
+    const lastEval = safeEvals.filter(e => e.playerId === p.id).slice(-1)[0];
+    const subDetails = getPlayerSubscriptionDetails(p, safeTrainings, safeAttendance, safePayments);
     const totalPast = subDetails.attendedCount + subDetails.absentCount + subDetails.excusedCount;
     const computedAttendancePct = totalPast > 0 ? Math.round((subDetails.attendedCount / totalPast) * 100) : 100;
 
-    const playerPays = (payments || []).filter(pay => String(pay.playerId) === String(p.id) && pay.type === "subscription");
+    const playerPays = safePayments.filter(pay => String(pay.playerId) === String(p.id) && pay.type === "subscription");
     const sortedPays = [...playerPays].sort((a, b) => {
       const da = toLocalDateStr(a.date);
       const db = toLocalDateStr(b.date);
@@ -6768,8 +6806,8 @@ function CoachPlayers({ myPlayers, group, evals, t, trainings, attendance, payme
   }
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
-      {myPlayers.map(p => {
-        const subDetails = getPlayerSubscriptionDetails(p, trainings, attendance, payments);
+      {safeMyPlayers.map(p => {
+        const subDetails = getPlayerSubscriptionDetails(p, safeTrainings, safeAttendance, safePayments);
         const subText = subDetails.isUnpaid ? "غير مسدد" : subDetails.isExpired ? `منتهي (${subDetails.attendedCount} / ${subDetails.cycleSessions.length})` : `${subDetails.attendedCount} / ${subDetails.cycleSessions.length}`;
         return (
           <Card key={p.id} hover t={t} style={{ padding: 20, cursor: "pointer" }} onClick={() => setSel(p.id)}>
@@ -6793,34 +6831,38 @@ function CoachPlayers({ myPlayers, group, evals, t, trainings, attendance, payme
 }
 
 /* ── Coach Attendance ───────────────────────────────── */
-function CoachAttendance({ coachId, group, myPlayers, attendance, setAttendance, t, payments, trainings }) {
+function CoachAttendance({ coachId, group, myPlayers = [], attendance = [], setAttendance, t, payments = [], trainings = [] }) {
   const [date, setDate]     = useState("");
   const [records, setRecords] = useState({});
+  const safeMyPlayers = myPlayers || [];
+  const safeAttendance = attendance || [];
+  const safePayments = payments || [];
+  const safeTrainings = trainings || [];
 
-  const scheduledDates = getGroupScheduledDates(group?.id, trainings);
+  const scheduledDates = getGroupScheduledDates(group?.id, safeTrainings);
   useEffect(() => {
     const todayStr = getLocalDateString(new Date());
     const defaultDate = scheduledDates.find(d => d <= todayStr) || scheduledDates[0] || todayStr;
     setDate(defaultDate);
-  }, [group, trainings]);
+  }, [group, safeTrainings]);
 
   useEffect(() => {
-    const existing = (attendance || []).find(a => compareDates(a.date, date) && a.groupId === group?.id);
+    const existing = safeAttendance.find(a => compareDates(a.date, date) && a.groupId === group?.id);
     if (existing) {
       setRecords(existing.records || {});
     } else {
       const defaultRecs = {};
-      myPlayers.forEach(p => {
-        const subDetails = getPlayerSubscriptionDetails(p, trainings, attendance, payments);
+      safeMyPlayers.forEach(p => {
+        const subDetails = getPlayerSubscriptionDetails(p, safeTrainings, safeAttendance, safePayments);
         defaultRecs[p.id] = (subDetails.isUnpaid || subDetails.isExpired || p.status === "مجمد") ? "غائب" : "حاضر";
       });
       setRecords(defaultRecs);
     }
-  }, [date, group, myPlayers, attendance, payments, trainings]);
+  }, [date, group, safeMyPlayers, safeAttendance, safePayments, safeTrainings]);
 
   const save = () => {
     setAttendance(prev => {
-      const filtered = prev.filter(a => !(compareDates(a.date, date) && a.groupId === group?.id));
+      const filtered = (prev || []).filter(a => !(compareDates(a.date, date) && a.groupId === group?.id));
       return [...filtered, { id: `att${Date.now()}`, date, groupId: group?.id, coachId, records }];
     });
     alert("تم حفظ الحضور");
@@ -6853,10 +6895,10 @@ function CoachAttendance({ coachId, group, myPlayers, attendance, setAttendance,
         <Btn variant="success" onClick={save}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="save" size={14} color="currentColor" /> حفظ</span> الحضور</Btn>
       </div>
       <Card t={t} style={{ overflow: "hidden" }} className="s2">
-        {myPlayers.map((p, i) => {
-          const subDetails = getPlayerSubscriptionDetails(p, trainings, attendance, payments);
+        {safeMyPlayers.map((p, i) => {
+          const subDetails = getPlayerSubscriptionDetails(p, safeTrainings, safeAttendance, safePayments);
           return (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: i < myPlayers.length - 1 ? `1px solid ${t.border}` : "none" }}>
+            <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: i < safeMyPlayers.length - 1 ? `1px solid ${t.border}` : "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <Avatar name={p.name} size={34} color="#06B6D4"/>
                 <div>
@@ -6902,16 +6944,18 @@ function CoachAttendance({ coachId, group, myPlayers, attendance, setAttendance,
 }
 
 /* ── Coach Eval ─────────────────────────────────────── */
-function CoachEval({ coachId, myPlayers, evals, setEvals, t }) {
+function CoachEval({ coachId, myPlayers = [], evals = [], setEvals, t }) {
+  const safeMyPlayers = myPlayers || [];
+  const safeEvals = evals || [];
   const [modal, setModal] = useState(false);
-  const [form, setForm]   = useState({ playerId: myPlayers[0]?.id || "", speed: 80, technique: 80, teamwork: 80, note: "", date: getLocalDateString(new Date()) });
-  const save = () => { setEvals(e => [...e, { ...form, id: `ev${Date.now()}`, coachId }]); setModal(false); };
+  const [form, setForm]   = useState({ playerId: safeMyPlayers[0]?.id || "", speed: 80, technique: 80, teamwork: 80, note: "", date: getLocalDateString(new Date()) });
+  const save = () => { setEvals(e => [...(e || []), { ...form, id: `ev${Date.now()}`, coachId }]); setModal(false); };
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}><Btn onClick={() => setModal(true)}><AnimIcon type="plus" size={14} color="#fff"/> إضافة تقييم</Btn></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {evals.filter(e => e.coachId === coachId).slice().reverse().map(e => {
-          const p = myPlayers.find(x => x.id === e.playerId);
+        {safeEvals.filter(e => e.coachId === coachId).slice().reverse().map(e => {
+          const p = safeMyPlayers.find(x => x.id === e.playerId);
           return (
             <Card key={e.id} t={t} style={{ padding: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -6932,7 +6976,7 @@ function CoachEval({ coachId, myPlayers, evals, setEvals, t }) {
       </div>
       {modal && (
         <Modal title="إضافة تقييم" onClose={() => setModal(false)} t={t}>
-          <Input label="اللاعب" value={form.playerId} onChange={v => setForm(f => ({ ...f, playerId: v }))} options={myPlayers.map(p => ({ v: p.id, l: p.name }))} t={t}/>
+          <Input label="اللاعب" value={form.playerId} onChange={v => setForm(f => ({ ...f, playerId: v }))} options={safeMyPlayers.map(p => ({ v: p.id, l: p.name }))} t={t}/>
           <Input label="التاريخ" value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} type="date" t={t}/>
           {[["السرعة", "speed", "#06B6D4"], ["التقنية", "technique", "#2563EB"], ["العمل الجماعي", "teamwork", "#F59E0B"]].map(([l, k, c]) => (
             <div key={k} style={{ marginBottom: 14 }}>
@@ -6953,20 +6997,23 @@ function CoachEval({ coachId, myPlayers, evals, setEvals, t }) {
 }
 
 /* ── Coach Payments ─────────────────────────────────── */
-function CoachPayments({ coachId, myPlayers, payments, setPayments, prices, coaches, t, groups }) {
+function CoachPayments({ coachId, myPlayers = [], payments = [], setPayments, prices = [], coaches = [], t, groups = [] }) {
+  const safeMyPlayers = myPlayers || [];
+  const safePayments = payments || [];
+  const safeCoaches = coaches || [];
   const [modal, setModal] = useState(false);
-  const [form, setForm]   = useState({ playerId: myPlayers[0]?.id || "", type: "subscription", month: CUR_MONTH, note: "", date: getLocalDateString(new Date()) });
-  const myPays = payments.filter(p => p.coachId === coachId);
+  const [form, setForm]   = useState({ playerId: safeMyPlayers[0]?.id || "", type: "subscription", month: CUR_MONTH, note: "", date: getLocalDateString(new Date()) });
+  const myPays = safePayments.filter(p => p.coachId === coachId);
   const total  = myPays.reduce((a, p) => a + p.amount - (p.discount || 0), 0);
   const save   = () => {
-    const player = myPlayers.find(p => p.id === form.playerId);
-    const coach  = coaches.find(c => c.id === coachId);
+    const player = safeMyPlayers.find(p => p.id === form.playerId);
+    const coach  = safeCoaches.find(c => c.id === coachId);
     const playerGroup = (groups || []).find(g => g.id === player?.groupId);
     const amount = form.type === "subscription"
       ? (playerGroup?.price !== undefined ? playerGroup.price : (prices.subscription || 350))
       : (prices[form.type] || 0);
 
-    setPayments(ps => [...ps, { ...form, id: `pay${Date.now()}`, coachId, coachName: coach?.name || "", playerName: player?.name || "", amount: amount, discount: 0 }]);
+    setPayments(ps => [...(ps || []), { ...form, id: `pay${Date.now()}`, coachId, coachName: coach?.name || "", playerName: player?.name || "", amount: amount, discount: 0 }]);
     setModal(false);
   };
   return (

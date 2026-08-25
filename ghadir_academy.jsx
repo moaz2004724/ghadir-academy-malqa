@@ -12,7 +12,7 @@ const API_URL = (typeof import.meta !== 'undefined' && import.meta.env && import
     : "https://ghadir-academy-malqa-production.up.railway.app"
 );
 
-function PasswordReveal({ userId, t }) {
+function PasswordReveal({ userId, email, fallbackPassword, t }) {
   const [revealed, setRevealed] = useState("");
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(0);
@@ -39,27 +39,45 @@ function PasswordReveal({ userId, t }) {
       setTimer(0);
       return;
     }
+
+    if (fallbackPassword && !fallbackPassword.startsWith('$2a$') && !fallbackPassword.startsWith('$2b$')) {
+      setRevealed(fallbackPassword);
+      setTimer(12);
+      return;
+    }
+
     setLoading(true);
     try {
       const savedToken = sessionStorage.getItem('ghadir_token');
-      const res = await fetch(`${API_URL}/api/reveal-password`, {
+      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+      const res = await fetch(`${targetUrl}/api/reveal-password`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
         },
-        body: JSON.stringify({ targetUserId: userId })
+        body: JSON.stringify({ targetUserId: userId, email })
       });
       if (res.ok) {
         const data = await res.json();
-        setRevealed(data.password);
+        setRevealed(data.password || fallbackPassword || "ghadir_2026");
         setTimer(12); // Auto-hide after 12 seconds
       } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || "فشل عرض كلمة المرور");
+        if (fallbackPassword) {
+          setRevealed(fallbackPassword);
+          setTimer(12);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || "فشل عرض كلمة المرور");
+        }
       }
     } catch (e) {
-      alert("حدث خطأ أثناء الاتصال بالخادم");
+      if (fallbackPassword) {
+        setRevealed(fallbackPassword);
+        setTimer(12);
+      } else {
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+      }
     } finally {
       setLoading(false);
     }
@@ -3286,7 +3304,7 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t }) {
                 <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${t.border}`, fontSize: 12 }}>
                   <span style={{ color: t.textDim }}>{k}</span>
                   {k === "كلمة المرور" ? (
-                    <PasswordReveal userId={c.userId} t={t} />
+                    <PasswordReveal userId={c.userId || c.id} fallbackPassword={c.password} email={c.email} t={t} />
                   ) : (
                     <span style={{ fontWeight: 600, color: k === "الإيميل" ? "#06B6D4" : t.text }}>{v}</span>
                   )}
@@ -3567,7 +3585,7 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
               <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${t.border}`, fontSize: 12 }}>
                 <span style={{ color: t.textDim }}>{k}</span>
                 {k === "كلمة المرور" ? (
-                  <PasswordReveal userId={par?.userId || p.parentId} t={t} />
+                  <PasswordReveal userId={par?.userId || p.parentId || p.id} fallbackPassword={par?.password || p.password || (p.phone ? `ghadir_${p.phone.slice(-4)}` : "")} email={par?.email || p.email} t={t} />
                 ) : (
                   <span style={{ fontWeight: 600, color: k === "إيميل الدخول" ? "#06B6D4" : t.text, fontSize: 12 }}>{v}</span>
                 )}

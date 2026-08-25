@@ -1948,8 +1948,25 @@ export default function App() {
 
     fetchData();
 
-    const interval = setInterval(fetchData, 6000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchData, 4000);
+    const handleFocus = () => fetchData();
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchData();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
   }, [user, token]);
 
   useEffect(() => {

@@ -2273,8 +2273,16 @@ export default function App() {
    ADMIN PORTAL
 ══════════════════════════════════════════════════════════ */
 function AdminPortal({ user, onLogout, groups, setGroups, coaches, setCoaches, players, setPlayers, parents, payments, setPayments, attendance, setAttendance, coachesAttendance, setCoachesAttendance, evals, messages, setMessages, prices, setPrices, trainings, setTrainings, t, syncStatus }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(() => {
+    return sessionStorage.getItem("ghadir_admin_active_tab") || "overview";
+  });
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+
+  useEffect(() => {
+    if (tab) {
+      sessionStorage.setItem("ghadir_admin_active_tab", tab);
+    }
+  }, [tab]);
   const tabs = [
     { id: "overview",     icon: "dashboard",    label: "نظرة عامة"   },
     { id: "teams",        icon: "teams",        label: "الأنشطة والرياضات" },

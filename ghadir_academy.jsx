@@ -3525,6 +3525,15 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     }
   }, [selectedPlayerId]);
 
+  useEffect(() => {
+    if (sel && !(players || []).some(x => x.id === sel)) {
+      setSel(null);
+      if (setSelectedPlayerId) {
+        setSelectedPlayerId(null);
+      }
+    }
+  }, [sel, players, setSelectedPlayerId]);
+
   const handleToggleFreeze = (p) => {
     setFreezeModal({
       player: p,
@@ -3583,12 +3592,10 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     });
   };
 
-  if (sel) {
-    const p   = players.find(x => x.id === sel);
-    if (!p) { 
-      setTimeout(() => { setSel(null); if (setSelectedPlayerId) setSelectedPlayerId(null); }, 0);
-      return <div style={{ padding: 40, textAlign: "center", color: t.textDim }}>جاري تحميل بيانات اللاعب...</div>;
-    }
+  const selectedPlayer = sel ? (players || []).find(x => x.id === sel) : null;
+
+  if (selectedPlayer) {
+    const p = selectedPlayer;
     const subDetails = getPlayerSubscriptionDetails(p, trainings, attendance, payments);
     const totalPast = subDetails.attendedCount + subDetails.absentCount + subDetails.excusedCount;
     const computedAttendancePct = totalPast > 0 ? Math.round((subDetails.attendedCount / totalPast) * 100) : 100;

@@ -17,7 +17,7 @@ export function getAuthToken() {
   return localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token') || "";
 }
 
-function PasswordReveal({ userId, email, fallbackPassword, t }) {
+function PasswordReveal({ userId, email, phone, fallbackPassword, t }) {
   const [revealed, setRevealed] = useState("");
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(0);
@@ -55,33 +55,47 @@ function PasswordReveal({ userId, email, fallbackPassword, t }) {
     try {
       const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-      const res = await fetch(`${targetUrl}/api/reveal-password`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-        },
-        body: JSON.stringify({ targetUserId: userId, email })
-      });
-      if (res.ok) {
+      const fetchUrls = ['/api/reveal-password', `${targetUrl}/api/reveal-password`];
+
+      let res = null;
+      for (const u of fetchUrls) {
+        try {
+          res = await fetch(u, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            },
+            body: JSON.stringify({ targetUserId: userId, email, phone })
+          });
+          if (res && res.ok) break;
+        } catch (err) {}
+      }
+
+      if (res && res.ok) {
         const data = await res.json();
-        setRevealed(data.password || fallbackPassword || "ghadir_2026");
-        setTimer(12); // Auto-hide after 12 seconds
+        setRevealed(data.password || fallbackPassword || (phone ? `ghadir_${phone.slice(-4)}` : "ghadir_2026"));
+        setTimer(12);
+      } else if (fallbackPassword) {
+        setRevealed(fallbackPassword);
+        setTimer(12);
+      } else if (phone) {
+        const digits = String(phone).replace(/\D/g, '');
+        setRevealed(digits.length >= 4 ? `ghadir_${digits.slice(-4)}` : "ghadir_2026");
+        setTimer(12);
       } else {
-        if (fallbackPassword) {
-          setRevealed(fallbackPassword);
-          setTimer(12);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          alert(err.error || "فشل عرض كلمة المرور");
-        }
+        alert("فشل عرض كلمة المرور");
       }
     } catch (e) {
       if (fallbackPassword) {
         setRevealed(fallbackPassword);
         setTimer(12);
+      } else if (phone) {
+        const digits = String(phone).replace(/\D/g, '');
+        setRevealed(digits.length >= 4 ? `ghadir_${digits.slice(-4)}` : "ghadir_2026");
+        setTimer(12);
       } else {
-        alert("حدث خطأ أثناء الاتصال بالخادم");
+        alert("فشل عرض كلمة المرور");
       }
     } finally {
       setLoading(false);
@@ -3418,7 +3432,7 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t }) {
                 <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${t.border}`, fontSize: 12 }}>
                   <span style={{ color: t.textDim }}>{k}</span>
                   {k === "كلمة المرور" ? (
-                    <PasswordReveal userId={c.userId || c.id} fallbackPassword={c.password} email={c.email} t={t} />
+                    <PasswordReveal userId={c.userId || c.id} fallbackPassword={c.password} email={c.email} phone={c.phone} t={t} />
                   ) : (
                     <span style={{ fontWeight: 600, color: k === "الإيميل" ? "#06B6D4" : t.text }}>{v}</span>
                   )}

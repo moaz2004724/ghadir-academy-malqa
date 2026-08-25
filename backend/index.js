@@ -297,7 +297,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/reveal-password', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
-  const { targetUserId, email, playerId, parentId } = req.body || {};
+  const { targetUserId, email, playerId, parentId, phone } = req.body || {};
   const searchId = targetUserId || playerId || parentId;
 
   try {

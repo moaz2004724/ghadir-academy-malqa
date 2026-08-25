@@ -1858,6 +1858,13 @@ export default function App() {
 
         if (res && res.ok) {
           const data = await res.json();
+          const targetInInitial = data.players?.find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+          console.log("[PLAYER REFRESH TRACE - AFTER INITIAL DATA]", {
+            targetExists: Boolean(targetInInitial),
+            targetId: targetInInitial?.id,
+            targetGroupId: targetInInitial?.groupId,
+            playersCount: data.players?.length
+          });
           console.log("[PLAYERS DEBUG 1]", { status: res.status, playersCount: data.players?.length, sample: data.players?.slice(0, 3) });
           console.log("[API ORDER] REQUEST END: GET /api/initial-data", { returnedPlayers: data.players?.length });
           
@@ -1892,6 +1899,11 @@ export default function App() {
                 email: migrated.email || `ghadir_${phone}@ghadirsports.sa`,
                 password: migrated.password || `ghadir_${phone.slice(-4)}`
               };
+            });
+            const targetInRepaired = repaired?.find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+            console.log("[PLAYER REFRESH TRACE - AFTER STATE]", {
+              targetExists: Boolean(targetInRepaired),
+              playersCount: repaired?.length
             });
             console.log("[PLAYERS DEBUG 2] setPlayers count:", repaired.length);
             setPlayers(repaired);
@@ -3526,16 +3538,27 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     return matchesSearch && matchesGroup;
   });
 
-  console.log("[PLAYERS DEBUG 3]", { fg, playersCount: players?.length, filteredCount: filtered?.length, filteredSample: filtered?.slice(0, 3) });
-  console.log("[PLAYERS DEBUG 4]", { renderingPlayers: true, visibleCount: filtered?.length });
-  console.log("[ACTUAL PLAYERS VIEW]", {
-    component: "AdminPlayers",
-    players: players?.length,
-    filtered: filtered?.length,
-    visible: filtered?.length,
+  const targetInPlayers = (players || []).find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+  const targetInFiltered = (filtered || []).find(p => p.name === "REFRESH_DISAPPEAR_TEST_2026");
+  
+  console.log("[PLAYER REFRESH TRACE - FILTER]", {
+    fg,
+    targetGroupId: targetInPlayers?.groupId,
+    targetInFiltered: Boolean(targetInFiltered),
+    filteredCount: filtered?.length
+  });
+  console.log("[PLAYER REFRESH TRACE - PAGINATION]", {
     page: 1,
-    pageItems: filtered?.length,
-    emptyState: filtered?.length === 0
+    pageSize: filtered?.length,
+    pageItemsCount: filtered?.length
+  });
+  console.log("[PLAYER REFRESH TRACE - RENDER]", {
+    component: "AdminPlayers",
+    targetRendered: Boolean(targetInFiltered)
+  });
+  console.log("[PLAYER REFRESH TRACE - EMPTY STATE]", {
+    value: filtered?.length,
+    reason: filtered?.length === 0 ? "filtered array is empty" : "none"
   });
 
   useEffect(() => {

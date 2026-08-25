@@ -1808,6 +1808,7 @@ export default function App() {
       pendingSyncsRef.current--;
       if (pendingSyncsRef.current <= 0) {
         pendingSyncsRef.current = 0;
+        setSyncStatus("synced");
       }
     }
   };

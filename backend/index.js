@@ -1101,7 +1101,15 @@ app.delete('/api/coaches/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_A
       return res.status(404).json({ error: 'المدرب غير موجود' });
     }
 
-    await prisma.coach.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.training.deleteMany({ where: { coachId: id } }),
+      prisma.evaluation.deleteMany({ where: { coachId: id } }),
+      prisma.attendance.updateMany({ where: { coachId: id }, data: { coachId: null } }),
+      prisma.group.updateMany({ where: { coachId: id }, data: { coachId: null } }),
+      prisma.payment.updateMany({ where: { coachId: id }, data: { coachId: null } }),
+      prisma.coach.delete({ where: { id } })
+    ]);
+
     if (existing.userId) {
       await prisma.user.delete({ where: { id: existing.userId } }).catch(() => {});
     }
@@ -1400,22 +1408,7 @@ app.delete('/api/groups/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_AD
   }
 });
 
-app.delete('/api/coaches/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
-  const { id } = req.params;
-  try {
-    await prisma.$transaction([
-      prisma.training.deleteMany({ where: { coachId: id } }),
-      prisma.evaluation.deleteMany({ where: { coachId: id } }),
-      prisma.attendance.updateMany({ where: { coachId: id }, data: { coachId: null } }),
-      prisma.group.updateMany({ where: { coachId: id }, data: { coachId: null } }),
-      prisma.coach.deleteMany({ where: { id } })
-    ]);
-    res.json({ success: true });
-  } catch (e) {
-    console.error("Error deleting coach:", e);
-    res.status(500).json({ error: e.message });
-  }
-});
+
 
 app.delete('/api/payments/:id', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
   const { id } = req.params;

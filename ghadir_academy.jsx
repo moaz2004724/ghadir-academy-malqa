@@ -3405,6 +3405,38 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
     setCoaches(cs => cs.map(c => c.id === coachId ? { ...c, perms: { ...c.perms, [permKey]: !c.perms[permKey] } } : c));
   };
 
+  const handleDeleteCoach = (coachId, coachName) => {
+    if (!window.confirm(`هل أنت متأكد من رغبتك في حذف المدرب "${coachName}"؟\nسيتم فك ارتباطه بالمجموعات وسجلات الحضور وإلغاء حسابه بالكامل.`)) {
+      return;
+    }
+    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
+    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
+    const fetchUrls = [`/api/coaches/${encodeURIComponent(coachId)}`, `${targetUrl}/api/coaches/${encodeURIComponent(coachId)}`];
+
+    (async () => {
+      let res = null;
+      for (const u of fetchUrls) {
+        try {
+          res = await fetch(u, {
+            method: 'DELETE',
+            headers: {
+              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+            }
+          });
+          if (res && res.ok) break;
+        } catch (e) {}
+      }
+      if (res && res.ok) {
+        setCoaches(cs => cs.filter(c => c.id !== coachId));
+        if (typeof loadInitialData === 'function') loadInitialData();
+        setModal(null);
+        if (sel === coachId) setSel(null);
+      } else {
+        alert("حدث خطأ أثناء حذف المدرب");
+      }
+    })();
+  };
+
   if (sel) {
     const c = (coaches || []).find(x => x.id === sel);
     if (!c) { 
@@ -3438,9 +3470,14 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
                   )}
                 </div>
               ))}
-              <Btn style={{ width: "100%", marginTop: 14 }} onClick={() => { setForm({ ...c }); setModal("edit"); }}>
-                <AnimIcon type="edit" size={14} color="#fff" /> تعديل البيانات
-              </Btn>
+              <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+                <Btn style={{ flex: 1 }} onClick={() => { setForm({ ...c }); setModal("edit"); }}>
+                  <AnimIcon type="edit" size={14} color="#fff" /> تعديل البيانات
+                </Btn>
+                <Btn variant="danger" style={{ flex: 1 }} onClick={() => handleDeleteCoach(c.id, c.name)}>
+                  <AnimIcon type="trash" size={14} color="#fff" /> حذف المدرب
+                </Btn>
+              </div>
             </Card>
 
             {/* Permissions Panel */}
@@ -3515,7 +3552,11 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
               <div style={{ flex: "1 1 calc(50% - 7px)" }}><Input label="الراتب" value={form.salary} onChange={v => setForm(x => ({ ...x, salary: +v }))} type="number" t={t}/></div>
               <div style={{ flex: "1 1 100%" }}><Input label="المجموعة" value={form.groupId} onChange={v => setForm(x => ({ ...x, groupId: v }))} options={[{ v: "", l: "بدون مجموعة" }, ...groups.map(g => ({ v: g.id, l: g.name }))]} t={t}/></div>
             </div>
-            <div style={{ display: "flex", gap: 10 }}><Btn onClick={save} style={{ flex: 1 }}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="save" size={14} color="currentColor" /> حفظ</span></Btn><Btn variant="secondary" onClick={() => setModal(null)}>إلغاء</Btn></div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn onClick={save} style={{ flex: 1 }}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="save" size={14} color="currentColor" /> حفظ</span></Btn>
+              <Btn variant="danger" onClick={() => handleDeleteCoach(form.id, form.name)}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="trash" size={14} color="currentColor" /> حذف المدرب</span></Btn>
+              <Btn variant="secondary" onClick={() => setModal(null)}>إلغاء</Btn>
+            </div>
           </Modal>
         )}
       </div>

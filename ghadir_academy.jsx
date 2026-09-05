@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
+import { startLiveRefresh, isEditingPage, keepUnchanged, canApplyRead } from "./sync/live-refresh.js";
 import RecoveryCenter from "./recovery/RecoveryCenter.jsx";
 import { protectLegacyData } from "./recovery/storage.js";
-import { apiFetch, getWriteStatus } from "./recovery/api.js";
+import { apiFetch, getWriteStatus, getWriteGeneration } from "./recovery/api.js";
 import logoMain from "./logo_main.png";
 import logoWhite from "./logo_white.png";
 import logoInstitutionColor from "./logo_institution_color.png";
@@ -1297,7 +1298,7 @@ function Footer({ t }) {
 function Modal({ title, onClose, children, wide, t }) {
   const theme = t || THEMES.dark;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", display: "grid", placeItems: "center", zIndex: 9999, backdropFilter: "blur(8px)" }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div role="dialog" aria-modal="true" aria-label={title} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", display: "grid", placeItems: "center", zIndex: 9999, backdropFilter: "blur(8px)" }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background: theme.bg2, border: `1px solid ${theme.border2}`, borderRadius: 22, padding: 30, width: `min(${wide ? "700px" : "480px"},93vw)`, maxHeight: "90vh", overflowY: "auto", animation: "scaleIn .25s ease", color: theme.text }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <div style={{ fontWeight: 800, fontSize: 16, color: theme.text }}>{title}</div>
@@ -1838,10 +1839,18 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [syncStatus]);
 
-  const isFirstFetchRef = useRef(true);
+  const loadSequenceRef = useRef(0);
+  const currentSessionRef = useRef('');
+  currentSessionRef.current = `${user?.id || ''}:${token}`;
+  const backgroundBlocked = () => getWriteStatus() !== 'synced' || pendingSyncsRef.current > 0 || isEditingPage();
 
   // Fetch from API (Clean Initial Load - Single Source of Truth)
-  const loadInitialData = useCallback(async () => {
+  const loadInitialData = useCallback(async ({ background = false, signal } = {}) => {
+    if (background && backgroundBlocked()) return null;
+    const sequence = ++loadSequenceRef.current;
+    const session = `${user?.id || ''}:${token}`;
+    const generation = getWriteGeneration();
+    const canApply = () => canApplyRead({ sequence, latestSequence: loadSequenceRef.current, session, currentSession: currentSessionRef.current, generation, currentGeneration: getWriteGeneration(), background, blocked: background && backgroundBlocked(), aborted: signal?.aborted });
     try {
       const savedToken = token || localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       if (!savedToken) {
@@ -1862,6 +1871,7 @@ export default function App() {
       for (const u of fetchUrls.slice(0, 1)) {
         try {
           res = await apiFetch(u, {
+            signal,
             cache: 'no-store',
             headers: { 
               'Authorization': `Bearer ${savedToken}`,
@@ -1873,39 +1883,41 @@ export default function App() {
         } catch (err) {}
       }
 
+      if (!canApply()) return null;
       if (res && res.ok) {
         const data = await res.json();
+        if (!canApply()) return null;
 
         if (data.players && Array.isArray(data.players)) {
-          setPlayers([...data.players]);
+          setPlayers(previous => keepUnchanged(previous, data.players));
         }
         if (data.coaches && Array.isArray(data.coaches)) {
-          setCoaches([...data.coaches]);
+          setCoaches(previous => keepUnchanged(previous, data.coaches));
         }
         if (data.groups && Array.isArray(data.groups)) {
           const cleanGroups = data.groups.filter(x => x.id !== "g-football" && x.name !== "كرة القدم" && x.id !== "g-swimming" && x.name !== "السباحة");
-          setGroups([...cleanGroups]);
+          setGroups(previous => keepUnchanged(previous, cleanGroups));
         }
         if (data.payments && Array.isArray(data.payments)) {
-          setPayments([...data.payments]);
+          setPayments(previous => keepUnchanged(previous, data.payments));
         }
         if (data.attendance && Array.isArray(data.attendance)) {
-          setAttendance([...data.attendance]);
+          setAttendance(previous => keepUnchanged(previous, data.attendance));
         }
         if (data.coachesAttendance && Array.isArray(data.coachesAttendance)) {
-          setCoachesAttendance([...data.coachesAttendance]);
+          setCoachesAttendance(previous => keepUnchanged(previous, data.coachesAttendance));
         }
         if (data.evals && Array.isArray(data.evals)) {
-          setEvals([...data.evals]);
+          setEvals(previous => keepUnchanged(previous, data.evals));
         }
         if (data.messages && Array.isArray(data.messages)) {
-          setMessages([...data.messages]);
+          setMessages(previous => keepUnchanged(previous, data.messages));
         }
         if (data.trainings && Array.isArray(data.trainings)) {
-          setTrainings([...data.trainings]);
+          setTrainings(previous => keepUnchanged(previous, data.trainings));
         }
         if (data.parents && Array.isArray(data.parents)) {
-          setParents([...data.parents]);
+          setParents(previous => keepUnchanged(previous, data.parents));
         }
         
         setSyncStatus(getWriteStatus());
@@ -1921,10 +1933,12 @@ export default function App() {
         }
       }
     } catch (e) {
-      setSyncStatus("error");
-      console.error("API Fetch Error:", e);
+      if (canApply() && e.name !== 'AbortError') {
+        setSyncStatus("error");
+        console.error("API Fetch Error:", e);
+      }
     } finally {
-      setIsAppLoading(false);
+      if (!background && session === currentSessionRef.current) setIsAppLoading(false);
     }
     return null;
   }, [token, user]);
@@ -1936,6 +1950,11 @@ export default function App() {
     }
     loadInitialData();
   }, [user, loadInitialData]);
+
+  useEffect(() => {
+    if (!user || !token) return;
+    return startLiveRefresh({ refresh: loadInitialData, canRefresh: () => !backgroundBlocked() });
+  }, [user?.id, token, loadInitialData]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -5809,7 +5828,9 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
   const [subTab, setSubTab] = useState("players");
   const [selGroup, setSelGroup] = useState(groups[0]?.id || "");
   const [date, setDate] = useState("");
-  const [records, setRecords] = useState({});
+  const [records, setRecordsState] = useState({});
+  const [attendanceDraft, setAttendanceDraft] = useState(false);
+  const setRecords = value => { setAttendanceDraft(true); setRecordsState(value); };
 
   useEffect(() => {
     if (subTab === "players") {
@@ -5826,28 +5847,30 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
     if (subTab === "players") {
       const existing = attendance.find(a => compareDates(a.date, date) && a.groupId === selGroup);
       if (existing) {
-        setRecords(existing.records || {});
+        setRecordsState(existing.records || {});
       } else {
         const defaultRecs = {};
         players.filter(p => p.groupId === selGroup).forEach(p => {
           const subDetails = getPlayerSubscriptionDetails(p, trainings, attendance, payments);
           defaultRecs[p.id] = (subDetails.isUnpaid || subDetails.isExpired || p.status === "مجمد") ? "غائب" : "حاضر";
         });
-        setRecords(defaultRecs);
+        setRecordsState(defaultRecs);
       }
     } else {
       const existing = coachesAttendance.find(a => compareDates(a.date, date));
       if (existing) {
-        setRecords(existing.records || {});
+        setRecordsState(existing.records || {});
       } else {
         const defaultRecs = {};
         coaches.forEach(c => {
           defaultRecs[c.id] = "حاضر";
         });
-        setRecords(defaultRecs);
+        setRecordsState(defaultRecs);
       }
     }
   }, [date, selGroup, subTab, attendance, coachesAttendance, players, coaches, payments, trainings]);
+
+  useEffect(() => setAttendanceDraft(false), [date, selGroup, subTab]);
 
   const save = async () => {
     const savedToken = getAuthToken();
@@ -5859,6 +5882,7 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
       });
       if (!res.ok) throw new Error('لم يؤكد السيرفر حفظ التحضير. راجع مركز الإنقاذ قبل إعادة المحاولة.');
       await res.json();
+      setAttendanceDraft(false);
       if (typeof loadInitialData === 'function') await loadInitialData();
       alert("أكد السيرفر حفظ التحضير بنجاح");
     } catch (error) { alert(error.message || 'تعذّر تأكيد حفظ التحضير.'); }
@@ -5867,7 +5891,7 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
   const list = subTab === "players" ? players.filter(p => p.groupId === selGroup) : coaches;
 
   return (
-    <div className="s1">
+    <div className="s1" data-live-refresh-pause={attendanceDraft ? "attendance-draft" : undefined}>
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         <button onClick={() => setSubTab("players")} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: subTab === "players" ? "linear-gradient(135deg,#2563EB,#1E40AF)" : t.bg2, color: subTab === "players" ? "#fff" : t.textDim, fontWeight: 700, cursor: "pointer", transition: "all .3s" }}>تحضير اللاعبين</button>
         <button onClick={() => setSubTab("coaches")} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: subTab === "coaches" ? "linear-gradient(135deg,#D8A435,#A87820)" : t.bg2, color: subTab === "coaches" ? "#fff" : t.textDim, fontWeight: 700, cursor: "pointer", transition: "all .3s" }}>تحضير المدربين</button>
@@ -5943,7 +5967,7 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
   );
 }
 
-function CoachPortal({ user, onLogout, groups = [], coaches = [], players = [], parents = [], payments = [], setPayments, attendance = [], setAttendance, coachesAttendance = [], setCoachesAttendance, evals = [], setEvals, messages = [], setMessages, prices = [], trainings = [], setTrainings, t, syncStatus }) {
+function CoachPortal({ user, onLogout, groups = [], coaches = [], players = [], parents = [], payments = [], setPayments, attendance = [], setAttendance, coachesAttendance = [], setCoachesAttendance, evals = [], setEvals, messages = [], setMessages, prices = [], trainings = [], setTrainings, t, syncStatus, loadInitialData }) {
   const safeCoaches = coaches || [];
   const safeGroups = groups || [];
   const safePlayers = players || [];
@@ -5988,7 +6012,7 @@ function CoachPortal({ user, onLogout, groups = [], coaches = [], players = [], 
       {tab === "home"       && <CoachHome coach={coach} group={group} groups={safeGroups} myPlayers={myPlayers} attendance={safeAttendance} evals={safeEvals} trainings={safeTrainings} t={t}/>}
       {tab === "sessions"   && <CoachSessions coach={coach} group={group} groups={safeGroups} trainings={safeTrainings} t={t}/>}
       {tab === "players"    && <CoachPlayers myPlayers={myPlayers} group={group} evals={safeEvals} t={t} trainings={safeTrainings} attendance={safeAttendance} payments={safePayments}/>}
-      {tab === "attendance" && perms.attendance !== false && <CoachAttendance coachId={user?.id} group={group} myPlayers={myPlayers} attendance={safeAttendance} setAttendance={setAttendance} t={t} payments={safePayments} trainings={safeTrainings}/>}
+      {tab === "attendance" && perms.attendance !== false && <CoachAttendance loadInitialData={loadInitialData} coachId={coach?.id || user?.id} group={group} myPlayers={myPlayers} attendance={safeAttendance} setAttendance={setAttendance} t={t} payments={safePayments} trainings={safeTrainings}/>}
       {tab === "eval"       && perms.evals !== false      && <CoachEval coachId={user?.id} myPlayers={myPlayers} evals={safeEvals} setEvals={setEvals} t={t}/>}
       {tab === "payments"   && perms.payments !== false   && <CoachPayments coachId={user?.id} myPlayers={myPlayers} payments={safePayments} setPayments={setPayments} prices={safePrices} coaches={safeCoaches} t={t} groups={safeGroups}/>}
       {tab === "messages"   && perms.messages !== false   && <Messaging messages={safeMessages} setMessages={setMessages} meId={user?.id} meName={coach?.name || "مدرب"} coaches={safeCoaches} parents={safeParents} t={t} role="coach" myGroupId={coach?.groupId} players={safePlayers} />}
@@ -6604,9 +6628,11 @@ function CoachPlayers({ myPlayers = [], group, evals = [], t, trainings = [], at
 }
 
 /* ── Coach Attendance ───────────────────────────────── */
-function CoachAttendance({ coachId, group, myPlayers = [], attendance = [], setAttendance, t, payments = [], trainings = [] }) {
+function CoachAttendance({ coachId, group, myPlayers = [], attendance = [], setAttendance, t, payments = [], trainings = [], loadInitialData }) {
   const [date, setDate]     = useState("");
-  const [records, setRecords] = useState({});
+  const [records, setRecordsState] = useState({});
+  const [attendanceDraft, setAttendanceDraft] = useState(false);
+  const setRecords = value => { setAttendanceDraft(true); setRecordsState(value); };
   const safeMyPlayers = myPlayers || [];
   const safeAttendance = attendance || [];
   const safePayments = payments || [];
@@ -6622,29 +6648,38 @@ function CoachAttendance({ coachId, group, myPlayers = [], attendance = [], setA
   useEffect(() => {
     const existing = safeAttendance.find(a => compareDates(a.date, date) && a.groupId === group?.id);
     if (existing) {
-      setRecords(existing.records || {});
+      setRecordsState(existing.records || {});
     } else {
       const defaultRecs = {};
       safeMyPlayers.forEach(p => {
         const subDetails = getPlayerSubscriptionDetails(p, safeTrainings, safeAttendance, safePayments);
         defaultRecs[p.id] = (subDetails.isUnpaid || subDetails.isExpired || p.status === "مجمد") ? "غائب" : "حاضر";
       });
-      setRecords(defaultRecs);
+      setRecordsState(defaultRecs);
     }
   }, [date, group, safeMyPlayers, safeAttendance, safePayments, safeTrainings]);
 
-  const save = () => {
-    setAttendance(prev => {
-      const filtered = (prev || []).filter(a => !(compareDates(a.date, date) && a.groupId === group?.id));
-      return [...filtered, { id: `att${Date.now()}`, date, groupId: group?.id, coachId, records }];
-    });
-    alert("تم حفظ الحضور");
+  useEffect(() => setAttendanceDraft(false), [date, group?.id]);
+
+  const save = async () => {
+    const existing = safeAttendance.find(a => compareDates(a.date, date) && a.groupId === group?.id);
+    try {
+      const res = await apiFetch('/api/attendance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ id: existing?.id || crypto.randomUUID(), date, groupId: group?.id, coachId, records })
+      });
+      if (!res.ok) throw new Error('لم يؤكد السيرفر حفظ الحضور. راجع مركز إنقاذ البيانات.');
+      await res.json();
+      setAttendanceDraft(false);
+      if (loadInitialData) await loadInitialData();
+      alert('أكد السيرفر حفظ الحضور');
+    } catch (error) { alert(error.message || 'تعذّر حفظ الحضور.'); }
   };
 
   const counts = { حاضر: Object.values(records).filter(v => v === "حاضر").length, غائب: Object.values(records).filter(v => v === "غائب").length, بعذر: Object.values(records).filter(v => v === "بعذر").length };
   
   return (
-    <div>
+    <div data-live-refresh-pause={attendanceDraft ? "attendance-draft" : undefined}>
       <div style={{ display: "flex", gap: 12, marginBottom: 18, alignItems: "center", flexWrap: "wrap" }} className="s1">
         <select value={date} onChange={e => setDate(e.target.value)} style={{ background: t.bg2, border: `1px solid ${t.border}`, borderRadius: 9, padding: "8px 14px", color: t.text, fontSize: 13, fontFamily: "'Cairo',sans-serif", outline: "none", cursor: "pointer" }}>
           {scheduledDates.map(dStr => {

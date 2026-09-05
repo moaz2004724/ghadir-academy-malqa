@@ -2,6 +2,8 @@ import { cleanBusinessData } from '../backend/recovery-format.js';
 import { REQUEST_PREFIX, reportRecoveryWarning, listUnconfirmedRequests } from './storage.js';
 
 let activeWrites = 0;
+let writeGeneration = 0;
+export const getWriteGeneration = () => writeGeneration;
 let unpersistedFailure = false;
 export function getWriteStatus() {
   if (unpersistedFailure) return 'error';
@@ -16,6 +18,7 @@ export async function apiFetch(input, init = {}) {
   const url = new URL(input, window.location.origin);
   const entity = /^\/api\/(players|coaches|groups|payments|attendance|coach-attendance|evaluations|messages|trainings)(?:\/[^/]+)?$/.exec(url.pathname)?.[1];
   if (!entity || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return fetch(input, init);
+  writeGeneration++;
   const key = REQUEST_PREFIX + crypto.randomUUID();
   let record;
   try {
@@ -47,5 +50,5 @@ export async function apiFetch(input, init = {}) {
   } catch (error) {
     // Retain the original request; do not claim it failed to reach the server.
     throw error;
-  } finally { activeWrites--; window.dispatchEvent(new Event('ghadir-recovery-change')); }
+  } finally { writeGeneration++; activeWrites--; window.dispatchEvent(new Event('ghadir-recovery-change')); }
 }

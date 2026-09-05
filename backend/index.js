@@ -5,6 +5,8 @@ import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { createRecoveryRouter } from './recovery-routes.js';
+import { prepareRecoverySchema } from './prepare-schema.js';
 
 dotenv.config();
 
@@ -71,7 +73,9 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+// Recovery bodies are parsed after authentication in their own router.
+const parseJSON = express.json();
+app.use((req, res, next) => req.path.startsWith('/api/recovery/') ? next() : parseJSON(req, res, next));
 
 // --- Security Middlewares ---
 const authenticateToken = async (req, res, next) => {
@@ -123,10 +127,12 @@ const requireRole = (roles) => {
   };
 };
 
+app.use('/api/recovery', createRecoveryRouter({ prisma, authenticateToken, requireRole }));
+
 // --- Health & Diagnostics ---
 app.get('/api/health', (req, res) => {
   const dbHost = (process.env.DATABASE_URL || '').replace(/:[^@]+@/, ':***@');
-  res.json({ status: 'ok', dbHost, version: 'secure-jwt-v4' });
+  res.json({ status: 'ok', dbHost, version: 'storage-recovery-v1' });
 });
 
 const parseSafeDate = (d) => {
@@ -138,40 +144,8 @@ const parseSafeDate = (d) => {
   return parsed;
 };
 
-app.post('/api/reset-database', async (req, res) => {
-  const { secret } = req.body;
-  if (secret !== 'GhadirLaunch2026') {
-    return res.status(403).json({ error: 'Unauthorized reset request' });
-  }
-  try {
-    console.log("Cleaning database for production launch...");
-    await prisma.message.deleteMany();
-    await prisma.evaluation.deleteMany();
-    await prisma.attendance.deleteMany();
-    await prisma.payment.deleteMany();
-    await prisma.training.deleteMany();
-    await prisma.player.deleteMany();
-    await prisma.coach.deleteMany();
-    await prisma.parent.deleteMany();
-    await prisma.group.deleteMany();
-    await prisma.user.deleteMany();
-
-    console.log("Seeding admin user...");
-    await prisma.user.create({
-      data: {
-        id: "admin",
-        email: "admin@ghadirsports.sa",
-        password: bcrypt.hashSync("Ghadir@2026!", 10),
-        role: "ADMIN",
-        name: "مدير الأكاديمية"
-      }
-    });
-
-    res.json({ success: true, message: 'Database successfully prepared for production launch!' });
-  } catch (error) {
-    console.error("Error resetting database:", error);
-    res.status(500).json({ error: error.message });
-  }
+app.post('/api/reset-database', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), (req, res) => {
+  res.status(410).json({ error: 'تصفير قاعدة البيانات معطل لحماية بيانات الأكاديمية.' });
 });
 
 // --- Auth Routes ---
@@ -441,7 +415,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
     const role = req.user.role;
     
     // Fetch raw lists
-    const [groups, coachesRaw, playersRaw, paymentsRaw, attendanceRaw, evalsRaw, messagesRaw, trainingsRaw, parentsRaw] = await Promise.all([
+    const [groups, coachesRaw, playersRaw, paymentsRaw, attendanceRaw, evalsRaw, messagesRaw, trainingsRaw, parentsRaw, coachAttendanceRaw] = await Promise.all([
       prisma.group.findMany(),
       prisma.coach.findMany({ include: { user: true } }),
       prisma.player.findMany({ include: { parent: { include: { user: true } } } }),
@@ -450,7 +424,8 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
       prisma.evaluation.findMany(),
       prisma.message.findMany(),
       prisma.training.findMany(),
-      prisma.parent.findMany({ include: { user: true } })
+      prisma.parent.findMany({ include: { user: true } }),
+      prisma.coachAttendance.findMany()
     ]);
 
     console.log(`[GET /api/initial-data] User: ${req.user.id} (${req.user.role}) | Total Players in DB: ${playersRaw.length}`);
@@ -498,7 +473,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         players,
         payments: paymentsRaw,
         attendance: attendanceRaw,
-        coachesAttendance: attendanceRaw.filter(a => a.coachId !== null),
+        coachesAttendance: coachAttendanceRaw,
         evals: evalsRaw,
         messages: messagesRaw,
         trainings: trainingsRaw,
@@ -533,7 +508,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         players: filteredPlayers,
         payments: filteredPayments,
         attendance: filteredAttendance,
-        coachesAttendance: filteredAttendance.filter(a => a.coachId !== null),
+        coachesAttendance: coachAttendanceRaw.map(a => ({ ...a, records: { [coachProfile.id]: a.records?.[coachProfile.id] } })),
         evals: filteredEvals,
         messages: filteredMessages,
         trainings: filteredTrainings,
@@ -807,18 +782,12 @@ app.post('/api/payments', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN'
     const resolvedDiscount = (discount !== undefined && discount !== null && !isNaN(discount)) ? parseFloat(discount) : 0;
     const resolvedSessions = (sessionsCount !== undefined && sessionsCount !== null && !isNaN(sessionsCount)) ? parseInt(sessionsCount) : 12;
 
-    let validPlayerId = playerId;
-    if (playerId) {
-      const pExists = await prisma.player.findUnique({ where: { id: playerId } });
-      if (!pExists) {
-        const firstP = await prisma.player.findFirst();
-        if (firstP) validPlayerId = firstP.id;
-      }
-    }
-
-    if (!validPlayerId) {
-      return res.status(400).json({ error: 'اللاعب غير موجود في النظام' });
-    }
+    // Never attach a failed/legacy player reference to the first player in the database.
+    const playerExists = typeof playerId === 'string' && await prisma.player.findUnique({ where: { id: playerId } });
+    if (!playerExists) return res.status(400).json({ error: 'اللاعب غير موجود. راجع سجل اللاعب قبل تسجيل المدفوعات.' });
+    const validPlayerId = playerId;
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount < 0 || resolvedDiscount < 0 || resolvedDiscount > numericAmount) return res.status(400).json({ error: 'راجع مبلغ الدفعة والخصم.' });
 
     const payment = await prisma.payment.create({
       data: { 
@@ -929,6 +898,21 @@ app.post('/api/attendance', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMI
     console.error("Attendance error:", e);
     res.status(500).json({ error: e.message });
   }
+});
+
+// Coach attendance has its own persistent records; it is not player attendance.
+app.post('/api/coach-attendance', authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+  const { date, records } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !records || typeof records !== 'object' || Array.isArray(records)) return res.status(400).json({ error: 'تاريخ أو سجلات حضور غير صالحة.' });
+  const normalizedDate = new Date(date + 'T00:00:00.000Z');
+  if (!Number.isFinite(normalizedDate.getTime()) || normalizedDate.toISOString().slice(0, 10) !== date) return res.status(400).json({ error: 'التاريخ غير صالح.' });
+  try {
+    const ids = Object.keys(records);
+    const coaches = await prisma.coach.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    if (coaches.length !== ids.length || Object.values(records).some(value => !['حاضر', 'غائب', 'بعذر', 'متأخر', 'معذور', 'إجازة'].includes(value))) return res.status(400).json({ error: 'راجع أسماء المدربين وحالات الحضور.' });
+    const saved = await prisma.coachAttendance.upsert({ where: { date: normalizedDate }, update: { records }, create: { date: normalizedDate, records } });
+    return res.json(saved);
+  } catch { return res.status(503).json({ error: 'تعذّر حفظ حضور المدربين. احتفظ بالنسخة المحلية وأعد المحاولة بعد التحقق.' }); }
 });
 
 // --- REST Coach Endpoints ---
@@ -1470,297 +1454,15 @@ app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
   }
 });
 
-const ensureAdminCredentialsOnBoot = async () => {
-  const newEmail = 'admin@ghadirsports.sa';
-  const newPassword = 'Ghadir@2026!';
-  const hashedPassword = bcrypt.hashSync(newPassword, 10);
-  const encrypted = encryptPassword(newPassword);
-
-  try {
-    console.log("Ensuring admin credentials are correct in DB...");
-    const existingMainAdmin = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: newEmail },
-          { id: 'admin' },
-          { id: 'royal-admin-id' },
-          { id: 'ghadir-admin-id' }
-        ]
-      }
-    });
-
-    if (existingMainAdmin) {
-      await prisma.user.update({
-        where: { id: existingMainAdmin.id },
-        data: {
-          email: newEmail,
-          password: hashedPassword,
-          encryptedPassword: encrypted,
-          name: 'مدير الأكاديمية',
-          role: 'ADMIN'
-        }
-      });
-      console.log(`Updated existing admin credentials to email: ${newEmail}`);
-    } else {
-      await prisma.user.create({
-        data: {
-          id: 'admin',
-          email: newEmail,
-          password: hashedPassword,
-          encryptedPassword: encrypted,
-          role: 'ADMIN',
-          name: 'مدير الأكاديمية'
-        }
-      });
-      console.log(`Created new admin credentials with email: ${newEmail}`);
-    }
-
-    // Also update any other admin/super_admin passwords to be secure
-    await prisma.user.updateMany({
-      where: {
-        role: { in: ['ADMIN', 'SUPER_ADMIN'] }
-      },
-      data: {
-        password: hashedPassword,
-        encryptedPassword: encrypted
-      }
-    });
-  } catch (err) {
-    console.error("Failed to ensure admin credentials on boot:", err);
-  }
-};
-
-const migratePasswordsOnBoot = async () => {
-  try {
-    console.log("Checking database users for plain text passwords...");
-    const users = await prisma.user.findMany();
-    let updatedCount = 0;
-    for (const u of users) {
-      const isAlreadyHashed = u.password.startsWith('$2a$') || u.password.startsWith('$2b$') || u.password.length === 60;
-      if (!isAlreadyHashed) {
-        console.log(`Hashing and encrypting password for user: ${u.email}`);
-        const hashedPassword = bcrypt.hashSync(u.password, 10);
-        const encrypted = encryptPassword(u.password);
-        await prisma.user.update({
-          where: { id: u.id },
-          data: { 
-            password: hashedPassword,
-            encryptedPassword: encrypted
-          }
-        });
-        updatedCount++;
-      }
-    }
-    if (updatedCount > 0) {
-      console.log(`Successfully migrated ${updatedCount} users to hashed passwords on boot.`);
-    } else {
-      console.log("All database users already have hashed passwords.");
-    }
-
-    // Auto-populate encryptedPassword for known default accounts if null
-    const allUsers = await prisma.user.findMany({ where: { encryptedPassword: null } });
-    for (const u of allUsers) {
-      let defaultPlain = null;
-      if (u.email === 'admin@ghadirsports.sa' || u.email === 'super@mohkam.sa') {
-        defaultPlain = 'Ghadir@2026!';
-      } else if (u.email === 'ahmed@ghadirsports.sa') {
-        defaultPlain = 'Coach@1234';
-      } else if (u.email === 'khaled@ghadirsports.sa') {
-        defaultPlain = 'Coach@5678';
-      } else if (u.email === 'saad@ghadirsports.sa') {
-        defaultPlain = 'Coach@9012';
-      } else if (u.email === 'parent@royal.sa') {
-        defaultPlain = 'Parent@2026';
-      } else if (u.email.endsWith('@mail.com')) {
-        if (u.email === 'aalghamdi@mail.com') defaultPlain = 'Parent@111';
-        else if (u.email === 'saqahtani@mail.com') defaultPlain = 'Parent@222';
-        else if (u.email === 'kzahrani@mail.com') defaultPlain = 'Parent@333';
-        else if (u.email === 'ashahri@mail.com') defaultPlain = 'Parent@444';
-        else if (u.email === 'adosari@mail.com') defaultPlain = 'Parent@555';
-        else if (u.email === 'aharbi@mail.com') defaultPlain = 'Parent@666';
-        else if (u.email === 'fsobiee@mail.com') defaultPlain = 'Parent@777';
-      }
-
-      if (defaultPlain) {
-        console.log(`Setting default encryptedPassword for user: ${u.email}`);
-        await prisma.user.update({
-          where: { id: u.id },
-          data: { encryptedPassword: encryptPassword(defaultPlain) }
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Boot-time password migration failed:", err);
-  }
-};
-
-const fixUserRolesOnBoot = async () => {
-  try {
-    console.log("Syncing user roles with profiles...");
-    const coaches = await prisma.coach.findMany({ include: { user: true } });
-    for (const c of coaches) {
-      if (c.user && c.user.role !== 'COACH' && c.user.role !== 'ADMIN' && c.user.role !== 'SUPER_ADMIN') {
-        console.log(`Fixing role to COACH for user: ${c.user.email}`);
-        await prisma.user.update({
-          where: { id: c.userId },
-          data: { role: 'COACH' }
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Failed to fix user roles on boot:", err);
-  }
-};
-
-const seedSportsAndTrainings = async () => {
-  try {
-    console.log("Seeding and updating sports/groups and their training days...");
-
-    // 1. Group list to ensure
-    const targetGroups = [
-      { id: 'g-football-juniors', name: 'كرة القدم - الصغار (5-10 سنوات)', color: '#16A34A', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-football-seniors', name: 'كرة القدم - الكبار (11-16 سنة)', color: '#15803D', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-swimming-boys', name: 'المسبح - بنين', color: '#0284C7', price8: 300, price12: 400, price16: 500 },
-      { id: 'g-swimming-girls', name: 'المسبح - بنات', color: '#0369A1', price8: 300, price12: 400, price16: 500 },
-      { id: 'g-gymnastics', name: 'الجمباز', color: '#9333EA', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-karate', name: 'الكاراتيه (بنين - بنات)', color: '#DC2626', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-basketball', name: 'كرة السلة', color: '#EA580C', price8: 250, price12: 350, price16: 450 },
-      { id: 'g-boxing', name: 'البوكسينج (بنين - بنات)', color: '#4B5563', price8: 250, price12: 350, price16: 450 }
-    ];
-
-    // Ensure all target groups exist in database
-    for (const tg of targetGroups) {
-      await prisma.group.upsert({
-        where: { id: tg.id },
-        update: {
-          name: tg.name,
-          color: tg.color,
-          price8: tg.price8,
-          price12: tg.price12,
-          price16: tg.price16
-        },
-        create: {
-          id: tg.id,
-          name: tg.name,
-          color: tg.color,
-          price8: tg.price8,
-          price12: tg.price12,
-          price16: tg.price16
-        }
-      });
-    }
-
-    // 2. Migrate existing players from old groups if they exist
-    const oldFootballGroups = await prisma.group.findMany({
-      where: {
-        OR: [
-          { id: 'g-football' },
-          { name: 'كرة القدم' }
-        ]
-      }
-    });
-    for (const fg of oldFootballGroups) {
-      const pList = await prisma.player.findMany({ where: { groupId: fg.id } });
-      for (const p of pList) {
-        const targetGroupId = (p.age && p.age <= 10) ? 'g-football-juniors' : 'g-football-seniors';
-        console.log(`Migrating football player ${p.name} (age ${p.age}) to ${targetGroupId}`);
-        await prisma.player.update({
-          where: { id: p.id },
-          data: { groupId: targetGroupId }
-        });
-      }
-      await prisma.attendance.deleteMany({ where: { groupId: fg.id } });
-      await prisma.coach.updateMany({ where: { groupId: fg.id }, data: { groupId: null } });
-      await prisma.training.deleteMany({ where: { groupId: fg.id } });
-      await prisma.group.deleteMany({ where: { id: fg.id } });
-    }
-
-    const oldSwimmingGroups = await prisma.group.findMany({
-      where: {
-        OR: [
-          { id: 'g-swimming' },
-          { name: 'السباحة' }
-        ]
-      }
-    });
-    for (const sg of oldSwimmingGroups) {
-      const pList = await prisma.player.findMany({ where: { groupId: sg.id } });
-      for (const p of pList) {
-        console.log(`Migrating swimming player ${p.name} to g-swimming-boys`);
-        await prisma.player.update({
-          where: { id: p.id },
-          data: { groupId: 'g-swimming-boys' }
-        });
-      }
-      await prisma.attendance.deleteMany({ where: { groupId: sg.id } });
-      await prisma.coach.updateMany({ where: { groupId: sg.id }, data: { groupId: null } });
-      await prisma.training.deleteMany({ where: { groupId: sg.id } });
-      await prisma.group.deleteMany({ where: { id: sg.id } });
-    }
-
-    // 3. Ensure training schedules are seeded correctly for Al-Malqa branch
-    const targetTrainings = [
-      { id: 't-football-juniors', groupId: 'g-football-juniors', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 90, field: "ملعب كرة القدم" },
-      { id: 't-football-seniors', groupId: 'g-football-seniors', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 90, field: "ملعب كرة القدم" },
-      { id: 't-swimming-boys', groupId: 'g-swimming-boys', days: ["الأحد", "الثلاثاء", "الخميس"], time: "15:00", duration: 120, field: "المسبح" },
-      { id: 't-swimming-girls', groupId: 'g-swimming-girls', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 120, field: "المسبح" },
-      { id: 't-gymnastics', groupId: 'g-gymnastics', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 60, field: "صالة الجمباز" },
-      { id: 't-karate', groupId: 'g-karate', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:30", duration: 60, field: "صالة الدفاع عن النفس" },
-      { id: 't-basketball', groupId: 'g-basketball', days: ["الأحد", "الثلاثاء", "الخميس"], time: "18:00", duration: 90, field: "الملعب الداخلي" },
-      { id: 't-boxing', groupId: 'g-boxing', days: ["الأحد", "الثلاثاء", "الخميس"], time: "17:00", duration: 60, field: "صالة البوكسينج" }
-    ];
-
-    let defaultCoach = await prisma.coach.findFirst();
-    if (!defaultCoach) {
-      const defaultUser = await prisma.user.upsert({
-        where: { email: 'coach@ghadirsports.sa' },
-        update: { role: 'COACH', name: 'الكابتن أحمد علي' },
-        create: { email: 'coach@ghadirsports.sa', password: bcrypt.hashSync('Ghadir@2026', 10), role: 'COACH', name: 'الكابتن أحمد علي' }
-      });
-      defaultCoach = await prisma.coach.upsert({
-        where: { userId: defaultUser.id },
-        update: {},
-        create: { id: 'c1', userId: defaultUser.id, specialty: 'تدريب عام' }
-      });
-    }
-
-    for (const tt of targetTrainings) {
-      await prisma.training.upsert({
-        where: { id: tt.id },
-        update: {
-          days: tt.days,
-          time: tt.time,
-          duration: tt.duration,
-          field: tt.field,
-          isRecurring: true,
-          type: 'training',
-          group: { connect: { id: tt.groupId } },
-          coach: { connect: { id: defaultCoach.id } }
-        },
-        create: {
-          id: tt.id,
-          days: tt.days,
-          time: tt.time,
-          duration: tt.duration,
-          field: tt.field,
-          isRecurring: true,
-          type: 'training',
-          group: { connect: { id: tt.groupId } },
-          coach: { connect: { id: defaultCoach.id } }
-        }
-      });
-    }
-
-    console.log("Sports and default training days successfully initialized.");
-  } catch (err) {
-    console.error("Seeding default sports and trainings failed:", err);
-  }
-};
-
-app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  await ensureAdminCredentialsOnBoot();
-  await migratePasswordsOnBoot();
-  await fixUserRolesOnBoot();
-  await seedSportsAndTrainings();
-});
+// Prepare only the two additive tables before accepting traffic. Existing
+// credentials, prices and academy records are never modified during startup.
+try {
+  await prepareRecoverySchema(prisma);
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} (storage-recovery-v1)`);
+  });
+} catch (error) {
+  console.error('Additive schema preparation failed:', error.code || error.name);
+  await prisma.$disconnect();
+  process.exitCode = 1;
+}

@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
+import RecoveryCenter from "./recovery/RecoveryCenter.jsx";
+import { protectLegacyData } from "./recovery/storage.js";
+import { apiFetch, getWriteStatus } from "./recovery/api.js";
 import logoMain from "./logo_main.png";
 import logoWhite from "./logo_white.png";
 import logoInstitutionColor from "./logo_institution_color.png";
 import logoInstitutionWhite from "./logo_institution_white.png";
 
-const API_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || (
-  typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-    ? "http://localhost:3001"
-    : "https://ghadir-academy-malqa-production.up.railway.app"
-);
+// Reads and writes use the same origin/proxy. Vite proxies /api during development.
+const API_URL = typeof window !== "undefined" ? window.location.origin : "";
+
 
 export function getAuthToken() {
   if (typeof window === "undefined") return "";
@@ -58,9 +59,10 @@ function PasswordReveal({ userId, email, phone, fallbackPassword, t }) {
       const fetchUrls = ['/api/reveal-password', `${targetUrl}/api/reveal-password`];
 
       let res = null;
-      for (const u of fetchUrls) {
+      let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
         try {
-          res = await fetch(u, {
+          res = await apiFetch(u, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -68,9 +70,10 @@ function PasswordReveal({ userId, email, phone, fallbackPassword, t }) {
             },
             body: JSON.stringify({ targetUserId: userId, email, phone })
           });
-          if (res && res.ok) break;
+          if (res && res.ok) { requestConfirmed = true; break; }
         } catch (err) {}
       }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
 
       if (res && res.ok) {
         const data = await res.json();
@@ -1382,10 +1385,10 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
       'https://ghadir-academy-malqa-production.up.railway.app/api/login'
     ];
 
-    for (const ep of endpointsToTry) {
+    for (const ep of endpointsToTry.slice(0, 1)) {
       if (loggedInUser && token) break;
       try {
-        const res = await fetch(ep, {
+        const res = await apiFetch(ep, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: cleanEmail, password: cleanPass })
@@ -1400,8 +1403,8 @@ function LoginPage({ onLogin, players = [], coaches = [], t }) {
     }
 
     if (loggedInUser && token) {
-      // Clear ALL old cached data so server becomes single source of truth
-      ['ghadir_players','ghadir_coaches','ghadir_groups','ghadir_parents','ghadir_payments','ghadir_attendance','ghadir_coachesAttendance','ghadir_evals','ghadir_messages','ghadir_trainings'].forEach(k => localStorage.removeItem(k));
+      // Preserve first. Legacy browser data may be the only surviving copy.
+      protectLegacyData();
       localStorage.setItem('ghadir_token', token);
       sessionStorage.setItem('ghadir_token', token);
       localStorage.setItem('ghadir_logged_user', JSON.stringify(loggedInUser));
@@ -1596,7 +1599,7 @@ function Shell({ title, subtitle, color, icon, tabs, activeTab, setActiveTab, on
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {syncStatus && (
             <div 
-              title={syncStatus === "error" ? "انقر لإعادة التحقق من المزامنة" : "حالة المزامنة مع الخادم"}
+              title={syncStatus === "error" ? "راجع الطلبات غير المؤكدة في مركز إنقاذ البيانات" : "حالة الاتصال والحفظ مع الخادم"}
               style={{ 
                 display: "flex", 
                 alignItems: "center", 
@@ -1616,7 +1619,7 @@ function Shell({ title, subtitle, color, icon, tabs, activeTab, setActiveTab, on
                 background: syncStatus === "synced" ? "#10B981" : syncStatus === "syncing" ? "#3B82F6" : "#EF4444", 
                 animation: syncStatus === "syncing" ? "pulse 1.5s infinite" : "none" 
               }}></span>
-              {syncStatus === "synced" ? "تم الحفظ" : syncStatus === "syncing" ? "جارٍ الحفظ..." : "خطأ في المزامنة"}
+              {syncStatus === "synced" ? "متصل بالخادم" : syncStatus === "syncing" ? "جارٍ الحفظ..." : "الحفظ غير مؤكد — راجع الإنقاذ"}
             </div>
           )}
           {badge && <div style={{ background: `${color}18`, border: `1px solid ${color}30`, color, fontSize: 12, fontWeight: 700, padding: "5px 13px", borderRadius: 20 }}>{badge}</div>}
@@ -1700,7 +1703,14 @@ export default function App() {
   const [payments, setPayments] = useState([]);
   const [theme, setTheme] = useState(() => localStorage.getItem('ghadir_theme') || "dark");
 
-  const [syncStatus, setSyncStatus] = useState("synced"); // 'synced', 'syncing', 'error'
+  const [syncStatus, setSyncStatus] = useState("syncing");
+  const [writeStatus, setWriteStatus] = useState(() => getWriteStatus());
+  useEffect(() => {
+    const update = () => setWriteStatus(getWriteStatus());
+    window.addEventListener('ghadir-recovery-change', update);
+    window.addEventListener('storage', update);
+    return () => { window.removeEventListener('ghadir-recovery-change', update); window.removeEventListener('storage', update); };
+  }, []); // 'synced', 'syncing', 'error'
   const [lastUpdate, setLastUpdateState] = useState(0);
   const lastLocalWriteRef = useRef(0);
   const pendingSyncsRef = useRef(0);
@@ -1713,7 +1723,7 @@ export default function App() {
     setLastUpdateState(time);
   };
 
-  const syncWithAPI = async (table, item, isDeleted = false) => {
+  const syncWithAPI = async (table, item, isDeleted = false, isUpdate = false) => {
     markLocalWrite();
     pendingSyncsRef.current++;
     setSyncStatus("syncing");
@@ -1737,18 +1747,19 @@ export default function App() {
         ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
       };
       let body = isDeleted ? undefined : JSON.stringify(item);
-      let method = isDeleted ? 'DELETE' : 'POST';
+      const restUpdate = isUpdate && ['players', 'coaches', 'payments'].includes(table);
+      let method = isDeleted ? 'DELETE' : restUpdate ? 'PUT' : 'POST';
 
-      const url = isDeleted ? `${targetUrl}/api/${path}/${item.id}` : `${targetUrl}/api/${path}`;
+      const url = isDeleted || restUpdate ? `${targetUrl}/api/${path}/${encodeURIComponent(item.id)}` : `${targetUrl}/api/${path}`;
 
       let success = false;
       let serverData = null;
-      const maxRetries = 2;
+      const maxRetries = 1; // An uncertain create must be reviewed, not blindly replayed.
       
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         if (success) break;
         try {
-          const res = await fetch(url, { method, headers, body });
+          const res = await apiFetch(url, { method, headers, body });
           if (res.ok || (isDeleted && res.status === 404)) {
             success = true;
             if (res.ok && !isDeleted) {
@@ -1790,7 +1801,7 @@ export default function App() {
       pendingSyncsRef.current--;
       if (pendingSyncsRef.current <= 0) {
         pendingSyncsRef.current = 0;
-        setSyncStatus("synced");
+        setSyncStatus(getWriteStatus());
       }
     }
   };
@@ -1818,7 +1829,7 @@ export default function App() {
   // Prevent closing window if data is still syncing
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (syncStatus === "syncing" || pendingSyncsRef.current > 0) {
+      if (getWriteStatus() !== "synced" || pendingSyncsRef.current > 0) {
         e.preventDefault();
         e.returnValue = 'جاري حفظ البيانات في قاعدة البيانات، يرجى الانتظار لحين الانتهاء لتجنب فقدان البيانات.';
       }
@@ -1848,9 +1859,9 @@ export default function App() {
       
       const timestamp = Date.now();
       const fetchUrls = [`/api/initial-data?_t=${timestamp}`, `${targetUrl}/api/initial-data?_t=${timestamp}`];
-      for (const u of fetchUrls) {
+      for (const u of fetchUrls.slice(0, 1)) {
         try {
-          res = await fetch(u, {
+          res = await apiFetch(u, {
             cache: 'no-store',
             headers: { 
               'Authorization': `Bearer ${savedToken}`,
@@ -1897,17 +1908,20 @@ export default function App() {
           setParents([...data.parents]);
         }
         
-        setSyncStatus("synced");
+        setSyncStatus(getWriteStatus());
         return data;
-      } else if (res && res.status === 401) {
+      } else {
         setSyncStatus("error");
+        if (res && res.status === 401) {
         setUser(null);
         setToken("");
         localStorage.removeItem('ghadir_logged_user');
         localStorage.removeItem('ghadir_token');
         sessionStorage.removeItem('ghadir_token');
+        }
       }
     } catch (e) {
+      setSyncStatus("error");
       console.error("API Fetch Error:", e);
     } finally {
       setIsAppLoading(false);
@@ -1938,237 +1952,42 @@ export default function App() {
 
   const t = THEMES[theme];
 
-  const shared = { 
-    syncStatus,
-    loadInitialData,
-    groups, 
-    setGroups: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setGroups(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(n => {
-              const old = prev.find(p => p.id === n.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(n);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(i => syncWithAPI('groups', i));
-            deleted.forEach(i => syncWithAPI('groups', i, true));
-          }
-          return next;
-        });
-      } else {
-        setGroups(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(i => syncWithAPI('groups', i));
-      }
-    },
-    coaches,
-    setCoaches: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setCoaches(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(n => {
-              const old = prev.find(p => p.id === n.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(n);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(i => syncWithAPI('coaches', i));
-            deleted.forEach(i => syncWithAPI('coaches', i, true));
-          }
-          return next;
-        });
-      } else {
-        setCoaches(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(i => syncWithAPI('coaches', i));
-      }
-    },
-    players,
-    setPlayers: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setPlayers(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(n => {
-              const old = prev.find(p => p.id === n.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(n);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            // Sync with server and update local state with server response
-            addedOrChanged.forEach(async (item) => {
-              const serverData = await syncWithAPI('players', item);
-              if (serverData && serverData.id && serverData.id !== item.id) {
-                // Server returned a different ID — update local state
-                setPlayers(ps => ps.map(p => p.id === item.id ? { ...p, ...serverData } : p));
-              }
-            });
-            deleted.forEach(i => syncWithAPI('players', i, true));
-          }
-          return next;
-        });
-      } else {
-        setPlayers(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(i => syncWithAPI('players', i));
-      }
-    },
-    parents: (parents && parents.length > 0) ? parents : (players || []).reduce((acc, p) => {
-      if (p && p.parentId && !acc.find(x => String(x.id) === String(p.parentId))) {
-        acc.push({ id: p.parentId, name: `ولي أمر ${p.name}`, phone: p.phone, email: p.email, password: p.password });
-      }
-      return acc;
-    }, []),
-    payments,
-    setPayments: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setPayments(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(n => {
-              const old = prev.find(p => p.id === n.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(n);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(async (item) => {
-              const serverData = await syncWithAPI('payments', item);
-              if (serverData && serverData.id && serverData.id !== item.id) {
-                setPayments(ps => ps.map(p => p.id === item.id ? { ...p, ...serverData } : p));
-              }
-            });
-            deleted.forEach(i => syncWithAPI('payments', i, true));
-          }
-          return next;
-        });
-      } else {
-        setPayments(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(i => syncWithAPI('payments', i));
-      }
-    },
-    attendance, 
-    setAttendance: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setAttendance(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(item => {
-              const old = prev.find(x => x.id === item.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(item);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(item => syncWithAPI('attendance', item));
-            deleted.forEach(item => syncWithAPI('attendance', item, true));
-          }
-          return next;
-        });
-      } else {
-        setAttendance(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(item => syncWithAPI('attendance', item));
-      }
-    },
-    coachesAttendance, 
-    setCoachesAttendance: (val) => {
-      if (typeof val === 'function') {
-        setCoachesAttendance(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          return next;
-        });
-      } else {
-        setCoachesAttendance(val);
-      }
-    },
-    evals, 
-    setEvals: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setEvals(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(item => {
-              const old = prev.find(x => x.id === item.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(item);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(item => syncWithAPI('evals', item));
-            deleted.forEach(item => syncWithAPI('evals', item, true));
-          }
-          return next;
-        });
-      } else {
-        setEvals(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(item => syncWithAPI('evals', item));
-      }
-    },
-    messages, 
-    setMessages: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setMessages(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(item => {
-              const old = prev.find(x => x.id === item.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(item);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(item => syncWithAPI('messages', item));
-            deleted.forEach(item => syncWithAPI('messages', item, true));
-          }
-          return next;
-        });
-      } else {
-        setMessages(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(item => syncWithAPI('messages', item));
-      }
-    },
-    prices, setPrices, 
-    trainings, 
-    setTrainings: (val) => {
-      if (typeof val === 'function') {
-        markLocalWrite();
-        setTrainings(prev => {
-          const next = val(prev);
-          setLastUpdate();
-          if (API_URL) {
-            const addedOrChanged = next.filter(item => {
-              const old = prev.find(x => x.id === item.id);
-              return !old || JSON.stringify(old) !== JSON.stringify(item);
-            });
-            const deleted = prev.filter(p => !next.find(n => n.id === p.id));
-            addedOrChanged.forEach(item => syncWithAPI('trainings', item));
-            deleted.forEach(item => syncWithAPI('trainings', item, true));
-          }
-          return next;
-        });
-      } else {
-        setTrainings(val);
-        setLastUpdate();
-        if (API_URL && Array.isArray(val)) val.forEach(item => syncWithAPI('trainings', item));
-      }
-    },
-    t,
-    forceRefresh: () => {
-      setLastUpdate(0); // Clear lock
-      window.location.reload(); 
+  const dataRef = useRef({});
+  dataRef.current = { groups, coaches, players, payments, attendance, evals, messages, trainings };
+  const setters = { groups: setGroups, coaches: setCoaches, players: setPlayers, payments: setPayments, attendance: setAttendance, evals: setEvals, messages: setMessages, trainings: setTrainings };
+  const updateCollection = (table, value) => {
+    const previous = dataRef.current[table];
+    const next = typeof value === 'function' ? value(previous) : value;
+    if (!Array.isArray(next)) return;
+    // Calculate changes once, outside React's replayable state updater.
+    dataRef.current[table] = next;
+    setters[table](next);
+    setLastUpdate();
+    for (const item of next) {
+      const old = previous.find(x => x.id === item.id);
+      if (old && JSON.stringify(old) === JSON.stringify(item)) continue;
+      syncWithAPI(table, item, false, !!old).then(saved => {
+        if (saved?.id && saved.id !== item.id) {
+          setters[table](rows => rows.map(row => row.id === item.id ? { ...row, ...saved } : row));
+        }
+      });
     }
+    for (const item of previous.filter(x => !next.some(y => y.id === x.id))) syncWithAPI(table, item, true);
+  };
+  const shared = {
+    syncStatus: writeStatus === 'synced' ? syncStatus : writeStatus,
+    loadInitialData, groups, coaches, players, parents, payments, attendance, coachesAttendance,
+    evals, messages, prices, trainings, t,
+    setGroups: value => updateCollection('groups', value),
+    setCoaches: value => updateCollection('coaches', value),
+    setPlayers: value => updateCollection('players', value),
+    setPayments: value => updateCollection('payments', value),
+    setAttendance: value => updateCollection('attendance', value),
+    setEvals: value => updateCollection('evals', value),
+    setMessages: value => updateCollection('messages', value),
+    setTrainings: value => updateCollection('trainings', value),
+    setCoachesAttendance, setPrices,
+    forceRefresh: loadInitialData,
   };
 
   useEffect(() => {
@@ -2217,6 +2036,8 @@ export default function App() {
         .s4{animation:fadeUp .4s .28s ease both;opacity:0}
         .s5{animation:fadeUp .4s .36s ease both;opacity:0}
       `}</style>
+
+      <RecoveryCenter user={user} token={token} apiBase={API_URL} currentData={{ players, coaches, groups, parents, payments, attendance, coachesAttendance, evals, messages, trainings }} />
 
       {/* Theme toggle button — fixed */}
       {user && (
@@ -2332,7 +2153,7 @@ function AdminOverview({ players, coaches, groups, payments, attendance = [], tr
 
     if (API_URL) {
       const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-      fetch(`${API_URL}/api/messages`, {
+      apiFetch(`${API_URL}/api/messages`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -3075,9 +2896,10 @@ function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t, loadIn
     };
 
     const fetchUrls = ['/api/groups', `${targetUrl}/api/groups`];
-    for (const u of fetchUrls) {
+    let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
       try {
-        const res = await fetch(u, {
+        const res = await apiFetch(u, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3085,9 +2907,10 @@ function AdminTeams({ groups, setGroups, coaches, players, setPlayers, t, loadIn
           },
           body: JSON.stringify(payload)
         });
-        if (res && res.ok) break;
+        if (res && res.ok) { requestConfirmed = true; break; }
       } catch (e) {}
     }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
 
     if (typeof loadInitialData === 'function') {
       await loadInitialData();
@@ -3339,9 +3162,10 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
       const fetchUrls = ['/api/coaches', `${targetUrl}/api/coaches`];
       (async () => {
         let res = null;
-        for (const u of fetchUrls) {
+        let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
           try {
-            res = await fetch(u, {
+            res = await apiFetch(u, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -3349,9 +3173,10 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
               },
               body: JSON.stringify(payload)
             });
-            if (res && res.ok) break;
+            if (res && res.ok) { requestConfirmed = true; break; }
           } catch (e) {}
         }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
         if (res && res.ok) {
           if (typeof loadInitialData === 'function') loadInitialData();
           setModal(null);
@@ -3377,9 +3202,10 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
       const fetchUrls = [`/api/coaches/${form.id}`, `${targetUrl}/api/coaches/${form.id}`];
       (async () => {
         let res = null;
-        for (const u of fetchUrls) {
+        let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
           try {
-            res = await fetch(u, {
+            res = await apiFetch(u, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -3387,9 +3213,10 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
               },
               body: JSON.stringify(payload)
             });
-            if (res && res.ok) break;
+            if (res && res.ok) { requestConfirmed = true; break; }
           } catch (e) {}
         }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
         if (res && res.ok) {
           if (typeof loadInitialData === 'function') loadInitialData();
           setModal(null);
@@ -3415,17 +3242,19 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
 
     (async () => {
       let res = null;
-      for (const u of fetchUrls) {
+      let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
         try {
-          res = await fetch(u, {
+          res = await apiFetch(u, {
             method: 'DELETE',
             headers: {
               ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
             }
           });
-          if (res && res.ok) break;
+          if (res && res.ok) { requestConfirmed = true; break; }
         } catch (e) {}
       }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
       if (res && res.ok) {
         setCoaches(cs => cs.filter(c => c.id !== coachId));
         if (typeof loadInitialData === 'function') loadInitialData();
@@ -3676,13 +3505,14 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
       let res = null;
       let errorText = '';
 
-      for (const u of fetchUrls) {
+      let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
         try {
-          res = await fetch(u, {
+          res = await apiFetch(u, {
             method: 'DELETE',
             headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
           });
-          if (res && res.ok) break;
+          if (res && res.ok) { requestConfirmed = true; break; }
           else if (res) {
             errorText = await res.text();
           }
@@ -3690,6 +3520,7 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
           errorText = err.message;
         }
       }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
 
       if (res && res.ok) {
         console.log('[DELETE PLAYER] response status:', res.status);
@@ -3748,8 +3579,8 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
     };
 
     const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-    fetch(`${API_URL}/api/players`, {
-      method: "POST",
+    apiFetch(`${API_URL}/api/players/${encodeURIComponent(p.id)}`, {
+      method: "PUT",
       headers: { 
         "Content-Type": "application/json",
         ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
@@ -4083,9 +3914,10 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                 const fetchUrls = [`/api/players/${form.id}`, `${targetUrl}/api/players/${form.id}`];
 
                 let res = null;
-                for (const u of fetchUrls) {
+                let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
                   try {
-                    res = await fetch(u, {
+                    res = await apiFetch(u, {
                       method: 'PUT',
                       headers: {
                         'Content-Type': 'application/json',
@@ -4093,9 +3925,10 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                       },
                       body: JSON.stringify(payload)
                     });
-                    if (res && res.ok) break;
+                    if (res && res.ok) { requestConfirmed = true; break; }
                   } catch (e) {}
                 }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
 
                 if (res && res.ok) {
                   if (typeof loadInitialData === 'function') {
@@ -4363,9 +4196,10 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
 
               (async () => {
                 let res = null;
-                for (const u of fetchUrls) {
+                let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
                   try {
-                    res = await fetch(u, {
+                    res = await apiFetch(u, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -4373,9 +4207,10 @@ function AdminPlayers({ players, setPlayers, groups, parents, evals, coaches, t,
                       },
                       body: JSON.stringify(payload)
                     });
-                    if (res && res.ok) break;
+                    if (res && res.ok) { requestConfirmed = true; break; }
                   } catch (err) {}
                 }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
 
                 if (res && res.ok) {
                   if (typeof loadInitialData === 'function') {
@@ -4970,19 +4805,15 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
       for (const item of newPayments) {
         const payload = { ...item };
         delete payload.id;
-        const fetchUrls = ['/api/payments', `${targetUrl}/api/payments`];
-        for (const u of fetchUrls) {
-          try {
-            const res = await fetch(u, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-              },
-              body: JSON.stringify(payload)
-            });
-            if (res && res.ok) break;
-          } catch (e) {}
+        try {
+          const res = await apiFetch('/api/payments', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${savedToken}` }, body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error();
+        } catch {
+          alert('توقف حفظ الدفعة. قد تكون بعض المدفوعات السابقة حُفظت؛ راجع السجلات والطلبات غير المؤكدة قبل تكرار الإدخال.');
+          if (typeof loadInitialData === 'function') await loadInitialData();
+          return;
         }
       }
       if (typeof loadInitialData === 'function') {
@@ -5005,9 +4836,10 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
     };
     const fetchUrls = [`/api/payments/${editForm.id}`, `${targetUrl}/api/payments/${editForm.id}`];
     (async () => {
-      for (const u of fetchUrls) {
+      let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
         try {
-          const res = await fetch(u, {
+          const res = await apiFetch(u, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -5015,9 +4847,10 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
             },
             body: JSON.stringify(payload)
           });
-          if (res && res.ok) break;
+          if (res && res.ok) { requestConfirmed = true; break; }
         } catch (e) {}
       }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
       if (typeof loadInitialData === 'function') {
         await loadInitialData();
       }
@@ -5151,15 +4984,17 @@ function AdminPayments({ payments, setPayments, players, coaches, parents, price
                             const fetchUrls = [`/api/payments/${p.id}`, `${targetUrl}/api/payments/${p.id}`];
 
                             let res = null;
-                            for (const u of fetchUrls) {
+                            let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
                               try {
-                                res = await fetch(u, {
+                                res = await apiFetch(u, {
                                   method: 'DELETE',
                                   headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
                                 });
-                                if (res && res.ok) break;
+                                if (res && res.ok) { requestConfirmed = true; break; }
                               } catch (err) {}
                             }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
 
                             if (res && res.ok) {
                               if (typeof loadInitialData === 'function') {
@@ -5330,107 +5165,26 @@ function AdminPrices({ prices, setPrices, t, groups, setGroups, loadInitialData 
     return initialForm;
   });
   const [saved, setSaved] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-
-  const handleResetDatabase = async () => {
-    const confirm1 = window.confirm("تحذير هام جداً:\n\nهل أنت متأكد من رغبتك في حذف كافة بيانات النظام بالكامل؟\nسيتم حذف جميع اللاعبين، الفرق، المدربين، الحضور، والمدفوعات بشكل نهائي.");
-    if (!confirm1) return;
-
-    const confirm2 = window.confirm("تأكيد أخير:\n\nلا يمكن التراجع عن هذا الإجراء أبداً. هل تريد المتابعة وتصفير النظام للتشغيل الرسمي؟");
-    if (!confirm2) return;
-
-    setIsResetting(true);
-    try {
-      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-      const res = await fetch(`${API_URL}/api/reset-database`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-        },
-        body: JSON.stringify({ secret: "GhadirLaunch2026" })
-      });
-      
-      const data = await res.json();
-      if (res.ok && data.success) {
-        alert("تم إعادة تهيئة النظام وتصفير البيانات بنجاح!");
-        // Clear all cached local data keys to prevent dirty sync
-        localStorage.removeItem('ghadir_players');
-        localStorage.removeItem('ghadir_coaches');
-        localStorage.removeItem('ghadir_groups');
-        localStorage.removeItem('ghadir_parents');
-        localStorage.removeItem('ghadir_payments');
-        localStorage.removeItem('ghadir_attendance');
-        localStorage.removeItem('ghadir_coachesAttendance');
-        localStorage.removeItem('ghadir_evals');
-        localStorage.removeItem('ghadir_messages');
-        localStorage.removeItem('ghadir_trainings');
-        
-        // Also clear legacy keys
-        localStorage.removeItem('royals_players');
-        localStorage.removeItem('royals_coaches');
-        localStorage.removeItem('royals_groups');
-        localStorage.removeItem('royals_parents');
-        localStorage.removeItem('royals_payments');
-        localStorage.removeItem('royals_attendance');
-        localStorage.removeItem('royals_coachesAttendance');
-        localStorage.removeItem('royals_evals');
-        localStorage.removeItem('royals_messages');
-        localStorage.removeItem('royals_trainings');
-        
-        // Reload to fetch clean database state
-        window.location.reload();
-      } else {
-        alert("فشلت عملية إعادة التهيئة: " + (data.message || "خطأ غير معروف"));
-      }
-    } catch (e) {
-      console.error(e);
-      alert("حدث خطأ أثناء الاتصال بالخادم لإعادة التهيئة.");
-    } finally {
-      setIsResetting(false);
-    }
-  };
 
   const handleSave = async () => {
-    const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-    const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-
-    for (const g of (groups || [])) {
-      const p8 = form[`group_${g.id}_8`] !== undefined ? parseFloat(form[`group_${g.id}_8`]) : g.price8;
-      const p12 = form[`group_${g.id}_12`] !== undefined ? parseFloat(form[`group_${g.id}_12`]) : g.price12;
-      const p16 = form[`group_${g.id}_16`] !== undefined ? parseFloat(form[`group_${g.id}_16`]) : g.price16;
-
-      const groupPayload = {
-        id: g.id,
-        name: g.name,
-        color: g.color,
-        coachId: g.coachId,
-        price8: p8,
-        price12: p12,
-        price16: p16
-      };
-
-      const fetchUrls = ['/api/groups', `${targetUrl}/api/groups`];
-      for (const u of fetchUrls) {
-        try {
-          const res = await fetch(u, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-            },
-            body: JSON.stringify(groupPayload)
-          });
-          if (res && res.ok) break;
-        } catch (e) {}
+    setSaved(false);
+    try {
+      for (const g of (groups || [])) {
+        const payload = {
+          id: g.id, name: g.name, color: g.color, coachId: g.coachId,
+          price8: Number(form[`group_${g.id}_8`] ?? g.price8),
+          price12: Number(form[`group_${g.id}_12`] ?? g.price12),
+          price16: Number(form[`group_${g.id}_16`] ?? g.price16),
+        };
+        const res = await apiFetch('/api/groups', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('لم يؤكد السيرفر حفظ كل الأسعار. راجع مركز الإنقاذ قبل إعادة المحاولة.');
       }
-    }
-
-    if (typeof loadInitialData === 'function') {
-      await loadInitialData();
-    }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2200);
+      if (typeof loadInitialData === 'function') await loadInitialData();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
+    } catch (error) { alert(error.message || 'تعذّر تأكيد حفظ الأسعار.'); }
   };
 
   return (
@@ -5507,20 +5261,15 @@ function AdminPrices({ prices, setPrices, t, groups, setGroups, loadInitialData 
         <Card t={t} style={{ padding: 28, border: `1px solid rgba(239, 68, 68, 0.15)` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <AnimIcon type="alert" size={18} color="#EF4444" />
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#EF4444" }}>منطقة الخطورة - إدارة البيانات</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#EF4444" }}>حماية بيانات الأكاديمية</div>
           </div>
           
-          <div style={{ fontSize: 13, color: t.text, fontWeight: 600, marginBottom: 8 }}>إعادة تهيئة النظام وتصفير البيانات</div>
+          <div style={{ fontSize: 13, color: t.text, fontWeight: 600, marginBottom: 8 }}>نسخ البيانات واسترجاعها</div>
           <div style={{ fontSize: 11, color: t.textDim, lineHeight: "1.6", marginBottom: 20 }}>
-            هذا الإجراء يقوم بحذف كافة البيانات التجريبية والمدخلة في النظام (اللاعبين، الفرق، المدربين، التحضير، والمدفوعات) لإعداد النظام للتشغيل الرسمي الفعلي.
-            <br />
-            <span style={{ color: "#EF4444", fontWeight: 700 }}>تحذير:</span> لا يمكن استرجاع البيانات بعد حذفها. سيتم الاحتفاظ بحساب الإدارة فقط.
+            افتح مركز إنقاذ البيانات لحفظ نسخة من تخزين هذا المتصفح أو مراجعة ملفات مستخرجة من الروابط القديمة.
           </div>
           
-          <button onClick={handleResetDatabase} disabled={isResetting}
-            style={{ width: "100%", background: isResetting ? "rgba(239, 68, 68, 0.4)" : "linear-gradient(135deg,#EF4444,#B91C1C)", color: "#fff", border: "none", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 700, cursor: isResetting ? "not-allowed" : "pointer", transition: "all .3s", fontFamily: "'Cairo',sans-serif" }}>
-            {isResetting ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="sync" size={14} color="currentColor" /> جاري إعادة تهيئة النظام...</span> : <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AnimIcon type="trash" size={14} color="currentColor" /> إعادة تهيئة النظام وتصفير البيانات</span>}
-          </button>
+          <p style={{ color: t.textDim }}>تصفير البيانات معطل لحماية سجلات الأكاديمية. استخدم مركز إنقاذ البيانات لحفظ النسخ ومراجعتها.</p>
         </Card>
       </div>
     </div>
@@ -5571,9 +5320,10 @@ function AdminTrainings({ trainings, setTrainings, groups, coaches, t, loadIniti
 
     const fetchUrls = ['/api/trainings', `${targetUrl}/api/trainings`];
     (async () => {
-      for (const u of fetchUrls) {
+      let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
         try {
-          const res = await fetch(u, {
+          const res = await apiFetch(u, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -5581,9 +5331,10 @@ function AdminTrainings({ trainings, setTrainings, groups, coaches, t, loadIniti
             },
             body: JSON.stringify(payload)
           });
-          if (res && res.ok) break;
+          if (res && res.ok) { requestConfirmed = true; break; }
         } catch (e) {}
       }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
       if (typeof loadInitialData === 'function') {
         await loadInitialData();
       }
@@ -5641,15 +5392,17 @@ function AdminTrainings({ trainings, setTrainings, groups, coaches, t, loadIniti
                     const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
                     const fetchUrls = [`/api/trainings/${tr.id}`, `${targetUrl}/api/trainings/${tr.id}`];
                     (async () => {
-                      for (const u of fetchUrls) {
+                      let requestConfirmed = false;
+      for (const u of fetchUrls.slice(0, 1)) {
                         try {
-                          const res = await fetch(u, {
+                          const res = await apiFetch(u, {
                             method: 'DELETE',
                             headers: { ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {}) }
                           });
-                          if (res && res.ok) break;
+                          if (res && res.ok) { requestConfirmed = true; break; }
                         } catch (e) {}
                       }
+      if (!requestConfirmed) { alert("لم يؤكد السيرفر حفظ التعديل. احتفظ بالبيانات وراجع الطلبات غير المؤكدة في مركز الإنقاذ قبل إعادة المحاولة."); return; }
                       if (typeof loadInitialData === 'function') await loadInitialData();
                     })();
                   }
@@ -6097,39 +5850,18 @@ function AdminAttendance({ groups, players, coaches, attendance, setAttendance, 
   }, [date, selGroup, subTab, attendance, coachesAttendance, players, coaches, payments, trainings]);
 
   const save = async () => {
-    if (subTab === "players") {
-      const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-      const targetUrl = API_URL || 'https://ghadir-academy-malqa-production.up.railway.app';
-      const payload = {
-        date,
-        groupId: selGroup,
-        records
-      };
-      const fetchUrls = ['/api/attendance', `${targetUrl}/api/attendance`];
-      for (const u of fetchUrls) {
-        try {
-          const res = await fetch(u, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-            },
-            body: JSON.stringify(payload)
-          });
-          if (res && res.ok) break;
-        } catch (e) {}
-      }
-      if (typeof loadInitialData === 'function') {
-        await loadInitialData();
-      }
-    } else {
-      const newAtt = { id: `ca${Date.now()}`, date, records };
-      setCoachesAttendance(prev => {
-        const filtered = prev.filter(a => compareDates(a.date, date));
-        return [...filtered, newAtt];
+    const savedToken = getAuthToken();
+    const existing = attendance.find(a => compareDates(a.date, date) && a.groupId === selGroup);
+    const payload = subTab === "players" ? { ...(existing ? { id: existing.id } : {}), date, groupId: selGroup, records } : { date, records };
+    try {
+      const res = await apiFetch(subTab === "players" ? '/api/attendance' : '/api/coach-attendance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${savedToken}` }, body: JSON.stringify(payload)
       });
-    }
-    alert("تم حفظ التحضير بنجاح");
+      if (!res.ok) throw new Error('لم يؤكد السيرفر حفظ التحضير. راجع مركز الإنقاذ قبل إعادة المحاولة.');
+      await res.json();
+      if (typeof loadInitialData === 'function') await loadInitialData();
+      alert("أكد السيرفر حفظ التحضير بنجاح");
+    } catch (error) { alert(error.message || 'تعذّر تأكيد حفظ التحضير.'); }
   };
 
   const list = subTab === "players" ? players.filter(p => p.groupId === selGroup) : coaches;
@@ -8061,7 +7793,7 @@ function Messaging({ messages, setMessages, meId, meName, coaches, parents, t, r
     if (API_URL) {
       const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
       newMsgs.forEach(m => {
-        fetch(`${API_URL}/api/messages`, {
+        apiFetch(`${API_URL}/api/messages`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -8098,7 +7830,7 @@ function Messaging({ messages, setMessages, meId, meName, coaches, parents, t, r
 
     if (API_URL) {
       const savedToken = localStorage.getItem('ghadir_token') || sessionStorage.getItem('ghadir_token');
-      fetch(`${API_URL}/api/messages`, {
+      apiFetch(`${API_URL}/api/messages`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

@@ -19,3 +19,9 @@ out/
 Thumbs.db
 *.tar.gz
 
+
+# Private recovery and production database backups
+backups/
+backup_*.json
+backend/backup_*.json
+*.dump

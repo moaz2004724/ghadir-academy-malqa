@@ -1,6 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './ghadir_academy.jsx'
+import { protectLegacyData } from './recovery/storage.js'
+
+// Synchronous protection runs before React or a login/initial-data request.
+protectLegacyData();
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -44,7 +48,7 @@ class ErrorBoundary extends React.Component {
               onClick={() => {
                 localStorage.removeItem('ghadir_logged_user');
                 localStorage.removeItem('ghadir_token');
-                sessionStorage.clear();
+                sessionStorage.removeItem('ghadir_token');
                 window.location.reload();
               }}
               style={{

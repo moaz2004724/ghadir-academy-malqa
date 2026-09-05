@@ -1,0 +1,11 @@
+{
+  "format": "ghadir-recovery",
+  "version": 1,
+  "origin": "https://old-branch.example",
+  "capturedAt": "2026-09-05T10:00:00.000Z",
+  "entries": [
+    { "store": "localStorage", "key": "royals_players", "entity": "players", "data": [{ "id": "test-player", "name": "لاعب اختبار الإنقاذ", "age": 10, "groupId": "test-group" }] },
+    { "store": "localStorage", "key": "royals_payments", "entity": "payments", "data": [{ "id": "test-payment", "playerId": "test-player", "amount": 300, "type": "subscription" }] }
+  ],
+  "warnings": []
+}

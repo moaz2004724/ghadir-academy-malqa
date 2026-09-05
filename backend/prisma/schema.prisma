@@ -186,3 +186,22 @@ model AuditLog {
   action    String   // PASSWORD_REVEALED
   timestamp DateTime @default(now())
 }
+
+// Immutable quarantine archive. No relations or writes to operational records.
+model RecoverySnapshot {
+  id         String   @id
+  origin     String
+  capturedAt DateTime
+  createdAt  DateTime @default(now())
+  uploadedBy String
+  counts     Json
+  payload    Json
+
+  @@index([createdAt])
+}
+
+model CoachAttendance {
+  id      String   @id @default(cuid())
+  date    DateTime @unique
+  records Json
+}

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import { startLiveRefresh, isEditingPage, keepUnchanged, canApplyRead } from "./sync/live-refresh.js";
-import RecoveryCenter from "./recovery/RecoveryCenter.jsx";
 import { protectLegacyData } from "./recovery/storage.js";
 import { apiFetch, getWriteStatus, getWriteGeneration } from "./recovery/api.js";
 import logoMain from "./logo_main.png";
@@ -2056,7 +2055,6 @@ export default function App() {
         .s5{animation:fadeUp .4s .36s ease both;opacity:0}
       `}</style>
 
-      <RecoveryCenter user={user} token={token} apiBase={API_URL} currentData={{ players, coaches, groups, parents, payments, attendance, coachesAttendance, evals, messages, trainings }} />
 
       {/* Theme toggle button — fixed */}
       {user && (
@@ -3151,6 +3149,10 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
   const empty = { name: "", phone: "", email: "", password: "", specialty: "", exp: 0, cert: "", groupId: "", salary: 0, perms: { ...DEFAULT_PERMS } };
   const [form, setForm] = useState(empty);
 
+  const permissionSaveRef = useRef(false);
+  const [permissionSaving, setPermissionSaving] = useState(false);
+  const [permissionError, setPermissionError] = useState("");
+
   const PERM_LABELS = [
     { key: "attendance", label: "تسجيل الحضور والغياب", icon: "attendance" },
     { key: "payments",   label: "استلام وتسجيل المدفوعات", icon: "payments" },
@@ -3247,8 +3249,29 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
     }
   };
 
-  const togglePerm = (coachId, permKey) => {
-    setCoaches(cs => cs.map(c => c.id === coachId ? { ...c, perms: { ...c.perms, [permKey]: !c.perms[permKey] } } : c));
+  const togglePerm = async (coachId, permKey) => {
+    if (permissionSaveRef.current) return;
+    const coach = coaches.find(c => c.id === coachId);
+    if (!coach) return;
+    permissionSaveRef.current = true;
+    setPermissionSaving(true);
+    setPermissionError("");
+    try {
+      const res = await apiFetch(`/api/coaches/${encodeURIComponent(coachId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ perms: { [permKey]: coach.perms?.[permKey] === false } })
+      });
+      if (!res.ok) throw new Error('تعذّر حفظ الصلاحية. حاول مرة أخرى بعد التأكد من الاتصال.');
+      const saved = await res.json();
+      if (saved.perms?.[permKey] !== (coach.perms?.[permKey] === false)) throw new Error('لم يؤكد السيرفر تعديل الصلاحية.');
+      await loadInitialData();
+    } catch (error) {
+      setPermissionError(error.message || 'تعذّر حفظ الصلاحية.');
+    } finally {
+      permissionSaveRef.current = false;
+      setPermissionSaving(false);
+    }
   };
 
   const handleDeleteCoach = (coachId, coachName) => {
@@ -3343,7 +3366,7 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
                       <span style={{ fontSize: 12, fontWeight: 600, color: enabled ? t.text : t.textDim }}>{label}</span>
                     </div>
                     {/* Toggle */}
-                    <button onClick={() => togglePerm(c.id, key)}
+                    <button role="switch" aria-label={label} aria-checked={enabled} disabled={permissionSaving} onClick={() => togglePerm(c.id, key)}
                       style={{ width: 42, height: 22, borderRadius: 11, border: "none", cursor: "pointer", transition: "all .25s", background: enabled ? "#10B981" : t.border, position: "relative", flexShrink: 0 }}>
                       <div style={{ position: "absolute", top: 3, right: enabled ? 3 : 21, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "right .25s", boxShadow: "0 1px 4px rgba(0,0,0,.2)" }}/>
                     </button>
@@ -3351,7 +3374,8 @@ function AdminCoaches({ coaches, setCoaches, groups, players, payments, t, loadI
                 );
               })}
               <div style={{ marginTop: 12, fontSize: 11, color: t.textFaint, lineHeight: 1.6 }}>
-                الصلاحيات المُلغاة تُزال فوراً من بوابة المدرب
+                {permissionSaving ? "جاري حفظ الصلاحية..." : "تُحدَّث الصلاحيات في بوابة المدرب تلقائيًا بعد حفظها."}
+                {permissionError && <div role="alert" style={{ color: "#EF4444" }}>{permissionError}</div>}
               </div>
             </Card>
           </div>

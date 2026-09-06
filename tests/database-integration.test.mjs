@@ -28,7 +28,7 @@ test('real PostgreSQL: startup preserves existing data, archives persist, coach 
   const password=bcrypt.hashSync('test-local-only',4);
   await prisma.user.create({data:{id:adminId,email:adminId+'@example.invalid',password,role:'ADMIN',name:'مدير اختبار'}});
   const group=await prisma.group.create({data:{id:'group-'+suffix,name:'مجموعة اختبار',price8:123,price12:234,price16:345}});
-  const coachUser=await prisma.user.create({data:{email:'coach-'+suffix+'@example.invalid',password,role:'COACH',name:'مدرب اختبار'}});
+  const coachUser=await prisma.user.create({data:{email:'coach-'+suffix.replace(/\d/g, d => String.fromCharCode(97 + Number(d)))+'@example.invalid',password,role:'COACH',name:'مدرب اختبار'}});
   const coach=await prisma.coach.create({data:{userId:coachUser.id}});
   const beforeUsers=await prisma.user.count(); const beforeGroups=await prisma.group.count();
   for(let i=0;i<2;i++) execFileSync('psql',['-h','127.0.0.1','-p',url.port,'-d','ghadir_recovery_test','-v','ON_ERROR_STOP=1','-f',path.join(root,'backend/sql/001_recovery_archive.sql'),'-f',path.join(root,'backend/sql/002_coach_attendance.sql')],{stdio:'pipe'});
@@ -59,6 +59,33 @@ test('real PostgreSQL: startup preserves existing data, archives persist, coach 
     assert.ok(fresh.players.some(row => row.id === player.id));
     assert.ok(fresh.payments.some(row => row.id === payment.id && row.playerId === player.id));
   }
+  // A permission-only update persists across independent admin/coach reads and leaves profile data intact.
+  const coachLogin = await (await fetch(base+'/api/login',{method:'POST',headers,body:JSON.stringify({email:coachUser.email,password:'test-local-only'})})).json();
+  assert.equal(coachLogin.user.role, 'coach');
+  const coachHeaders = {...headers, Authorization:`Bearer ${coachLogin.token}`};
+  const coachBefore = await prisma.coach.findUnique({where:{id:coach.id}});
+  const userBefore = await prisma.user.findUnique({where:{id:coachUser.id}});
+  for (const enabled of [false, true]) {
+    for (const key of ['attendance','payments','evals','messages']) {
+      const response = await fetch(base+'/api/coaches/'+coach.id,{method:'PUT',headers,body:JSON.stringify({perms:{[key]:enabled}})});
+      assert.equal(response.status,200);
+      assert.equal((await response.json()).perms[key],enabled);
+      for (const readHeaders of [headers, coachHeaders]) {
+        const data = await (await fetch(base+'/api/initial-data',{headers:readHeaders})).json();
+        assert.equal(data.coaches.find(c=>c.id===coach.id).perms[key],enabled);
+      }
+    }
+  }
+  const {perms:ignoredBefore,...profileBefore}=coachBefore;
+  const {perms:ignoredAfter,...profileAfter}=await prisma.coach.findUnique({where:{id:coach.id}});
+  assert.deepEqual(profileAfter,profileBefore);
+  assert.deepEqual(await prisma.user.findUnique({where:{id:coachUser.id}}),userBefore);
+  assert.equal((await fetch(base+'/api/coaches/'+coach.id,{method:'PUT',headers:coachHeaders,body:JSON.stringify({perms:{payments:false}})})).status,403);
+  assert.equal((await fetch(base+'/api/coaches/'+coach.id,{method:'PUT',headers,body:JSON.stringify({perms:{payments:'false'}})})).status,400);
+  assert.equal((await fetch(base+'/api/coaches/'+coach.id,{method:'PUT',headers,body:JSON.stringify({specialty:'تدريب اختبار',perms:{payments:false}})})).status,200);
+  assert.equal((await prisma.coach.findUnique({where:{id:coach.id}})).perms.payments,false);
+  assert.equal((await fetch(base+'/api/coaches/'+coach.id,{method:'PUT',headers,body:JSON.stringify({specialty:'تدريب'})})).status,200);
+  assert.equal((await prisma.coach.findUnique({where:{id:coach.id}})).perms.payments,false);
   const priorPlayers=await prisma.player.count();
   const again=await (await fetch(base+'/api/recovery/snapshots',{method:'POST',headers,body:JSON.stringify(fixture)})).json();
   assert.equal(again.id,saved.id);assert.equal(await prisma.player.count(),priorPlayers);
